@@ -9,18 +9,6 @@ Created by Geoff Cureton on 2013-03-05.
 Copyright (c) 2013 University of Wisconsin SSEC. All rights reserved.
 """
 
-file_Date = '$Date$'
-file_Revision = '$Revision$'
-file_Author = '$Author$'
-file_HeadURL = '$HeadURL$'
-file_Id = '$Id$'
-
-__author__ = 'G.P. Cureton <geoff.cureton@ssec.wisc.edu>'
-__version__ = '$Id$'
-__docformat__ = 'Epytext'
-
-
-
 import os, sys, logging, traceback
 from os import path,uname,environ
 import string
@@ -46,10 +34,10 @@ from tables import exceptions as pyEx
 import ViirsData
 
 # skim and convert routines for reading .asc metadata fields of interest
-import adl_blob2 as adl_blob
-import adl_asc
-from adl_asc import skim_dir, contiguous_granule_groups, granule_groups_contain, effective_anc_contains,eliminate_duplicates,_is_contiguous, RDR_REQUIRED_KEYS, POLARWANDER_REQUIRED_KEYS
-from adl_common import ADL_HOME, CSPP_RT_HOME, CSPP_RT_ANC_HOME
+#import adl_blob2 as adl_blob
+#import adl_asc
+#from adl_asc import skim_dir, contiguous_granule_groups, granule_groups_contain, effective_anc_contains,eliminate_duplicates,_is_contiguous, RDR_REQUIRED_KEYS, POLARWANDER_REQUIRED_KEYS
+#from adl_common import ADL_HOME, CSPP_RT_HOME, CSPP_RT_ANC_HOME
 
 # every module should have a LOG object
 try :
