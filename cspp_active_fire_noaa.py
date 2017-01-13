@@ -50,7 +50,9 @@ def get_granule_ID(IET_StartTime):
     Calculates the deterministic granule ID. From...
     ADL/CMN/Utilities/INF/util/gran/src/InfUtil_GranuleID.cpp
     """
-    # 
+    # NPP_GRANULE_ID_BASETIME corresponds to the number of microseconds between 
+    # datetime(2011, 10, 23, 0, 0, 0) and the IDPS epoch time (IET) datetime(1958,1,1), plus the 34
+    # leap seconds that had been added between the IET epoch and 2011.
     NPP_GRANULE_ID_BASETIME = int(os.environ.get('NPP_GRANULE_ID_BASETIME', 1698019234000000))
     granuleSize = 85350000      # microseconds
 
