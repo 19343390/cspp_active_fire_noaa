@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-$Id: adl_common.py 1931 2014-03-17 18:43:26Z kathys $
+log_common.py
 
-Purpose: Common routines for ADL XDR handling and ancillary data caching.
-
-Requires: adl_asc
+ * DESCRIPTION: Various routines for setting up logging.
 
 Created Oct 2011 by R.K.Garcia <rayg@ssec.wisc.edu>
 Copyright (c) 2011 University of Wisconsin Regents.
 Licensed under GNU GPLv3.
 """
 
-import os, sys, logging
-import basics
+import os
+import sys
+import logging
+
+from utils import check_and_convert_path
 
 import __main__
 
@@ -26,9 +27,10 @@ LOG = logging.getLogger(__name__)
 
 logging_configured = False
 
-
-# ref: http://stackoverflow.com/questions/1383254/logging-streamhandler-and-standard-streams
 class SingleLevelFilter(logging.Filter):
+    '''
+    ref: http://stackoverflow.com/questions/1383254/logging-streamhandler-and-standard-streams
+    '''
     def __init__(self, passlevels, reject):
         self.passlevels = set(passlevels)
         self.reject = reject
@@ -38,7 +40,6 @@ class SingleLevelFilter(logging.Filter):
             return (record.levelno not in self.passlevels)
         else:
             return (record.levelno in self.passlevels)
-
 
 def configure_logging(level=logging.WARNING, FILE=None):
     """
@@ -82,7 +83,6 @@ def configure_logging(level=logging.WARNING, FILE=None):
     h3 = None
     if FILE is not None:
         work_dir = os.path.dirname(FILE)
-        basics.check_and_convert_path("WORKDIR", work_dir, check_write=True)
         h3 = logging.FileHandler(filename=FILE)
         #        f3 = SingleLevelFilter([logging.INFO, logging.DEBUG], False)
         #        h3.addFilter(f3)
@@ -91,15 +91,11 @@ def configure_logging(level=logging.WARNING, FILE=None):
 
     rootLogger.setLevel(level)
 
-
 def status_line(status):
     """
     Put out a special status line
     """
-
-
     LOG.info('\n                 ( %s )\n'%status)
-
 
 def log_from_C(in_type, in_msg):
     type = ffi.string(in_type)
@@ -118,10 +114,8 @@ def log_from_C(in_type, in_msg):
 
     return int(0)
 
-
 log_callback = None
 log_lib = None
-
 
 def C_log_support(ffi_in):
     """
@@ -146,14 +140,12 @@ def C_log_support(ffi_in):
     log_callback = ffi.callback("int(char*,char *)", log_from_C)
     log_lib.set_log(log_callback)
 
-
 def _test_logging():
     LOG.debug('debug message')
     LOG.info('info message')
     LOG.warning('warning message')
     LOG.error('error message')
     LOG.critical('critical message')
-
 
 def test_C_callbacks():
     message = 'error'
@@ -171,7 +163,6 @@ def test_C_callbacks():
     message = 'debug'
     arg4 = ffi.new("char[]", message)
     log_lib.LOG_debug(arg4)
-
 
 if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG) we don't want basicConfig anymore

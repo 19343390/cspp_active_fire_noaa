@@ -1,18 +1,22 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-$Id:$
-
-Purpose:
+active_file_interface.py
 
 
-Copyright (c) 2011 University of Wisconsin Regents.
+ * DESCRIPTION: This file contains routines that contruct a series of valid command line
+ invocations for running the NOAA active fire algorithm. This includes building a dictionary of
+ valid inputs from the input file/directory globs.
+
+Created by Geoff Cureton on 2017-01-03.
+Copyright (c) 2017 University of Wisconsin Regents.
 Licensed under GNU GPLv3.
 """
 
 import os
 import sys
-import re, string
+import re
+import string
 import shutil
 import logging
 import time
@@ -20,427 +24,348 @@ from glob import glob
 import numpy as np
 import traceback
 from datetime import datetime
-import multiprocessing
+
+from utils import link_files, check_and_convert_path, check_and_convert_env_var, \
+        check_existing_env_var, CsppEnvironment
+
+LOG = logging.getLogger('active_file_interface')
 
 
-from basics import link_files,execute_binary_captured_inject_io
-#import log_common
-from convert import hdf4_2_netcdf4 as H4toNC4
-import satellites
-from multiproc import stitch_files
-
-LOG = logging.getLogger('geocat_interface')
-
-
-def execution_time(startTime, endTime):
-    '''
-    Converts a time duration in seconds to days, hours, minutes etc...
-    '''
-
-    time_dict = {}
-
-    delta = endTime - startTime
-    days, remainder = divmod(delta, 86400.)
-    hours, remainder = divmod(remainder, 3600.)
-    minutes, seconds = divmod(remainder, 60.)
-
-    time_dict['delta']   = delta
-    time_dict['days']    = int(days)
-    time_dict['hours']   = int(hours)
-    time_dict['minutes'] = int(minutes)
-    time_dict['seconds'] = seconds
-
-    return time_dict
-
-
-def afire_task_submitter(args):
-
-    segment = args['segment']
-    run_dir = args['run_dir']
-    cmd = args['cmd']
-    env_vars = args['env_vars']
-
-    env_vars['segment'] = segment
-
-    LOG.debug("segment = {}".format(segment))
-    LOG.debug("run_dir = {}".format(run_dir))
-    LOG.debug("env_vars = {}".format(env_vars))
-    LOG.debug("cmd = {}".format(cmd))
-
-    rc,exe_out = execute_binary_captured_inject_io(
-            run_dir, cmd,
-            log_execution=False, log_stdout=False, log_stderr=False,
-            **env_vars)
-
-    LOG.debug("Segment {} of {}: rc = {}".format(segment,cmd.split(" ")[-1],rc))
-
-
-    return [segment,rc,exe_out]
-
-
-def hdf4_to_netcdf4(work_dir, hdf_files):
+def get_granule_ID(IET_StartTime):
     """
-    Takes a list of HDF4 and converts them to NetCDF4.
+    Calculates the deterministic granule ID. From...
+    ADL/CMN/Utilities/INF/util/gran/src/InfUtil_GranuleID.cpp
     """
+    # NPP_GRANULE_ID_BASETIME corresponds to the number of microseconds between 
+    # datetime(2011, 10, 23, 0, 0, 0) and the IDPS epoch time (IET) datetime(1958,1,1), plus the 34
+    # leap seconds that had been added between the IET epoch and 2011.
+    NPP_GRANULE_ID_BASETIME = int(os.environ.get('NPP_GRANULE_ID_BASETIME', 1698019234000000))
+    granuleSize = 85350000      # microseconds
 
-    ret_val = 0
-    nc_files = []
-    nc_files_rc = []
+    # Subtract the spacecraft base time from the arbitrary time to obtain
+    # an elapsed time. 
+    elapsedTime = IET_StartTime - NPP_GRANULE_ID_BASETIME
 
-    if hdf_files:
+    # Divide the elapsed time by the granule size to obtain the granule number; 
+    # the integer division will give the desired floor value.
+    granuleNumber = int(np.floor(elapsedTime / granuleSize))
+    #granuleNumber = np.ceil(elapsedTime / granuleSize)
 
-        # Check that the HDF4 files exist...
-        for hdf_file in hdf_files:
-            if not os.path.exists(hdf_file):
-                LOG.warning("File does not exist: {}".format(hdf_file))
+    # Multiply the granule number by the granule size, then add the spacecraft
+    # base time to obtain the granule start boundary time. Add the granule
+    # size to the granule start boundary time to obtain the granule end
+    # boundary time.
+    #startBoundary = (granuleNumber * granuleSize) + NPP_GRANULE_ID_BASETIME
+    #endBoundary = startBoundary + granuleSize
 
-        LOG.debug("Converting the HDF4 output files to NetCDF4...")
-        LOG.debug("hdf_files : {}".format(hdf_files))
-        convert_rc = H4toNC4(work_dir,hdf_files)
-        LOG.debug("convert_rc : {}".format(convert_rc))
-
-        for hdf_file,rc in zip(hdf_files,convert_rc):
-            # Construct the netcdf4 file name...
-            hdf_file_base = string.split(os.path.basename(hdf_file),".hdf")[0]
-            nc_filename = os.path.join(work_dir,"{}.nc".format(hdf_file_base))
-            nc_file = glob(nc_filename)
-
-            LOG.debug("Checking conversion of {} to {} ...".format(hdf_file,nc_filename))
-
-            # Check that the converter reported succcess, and the netcdf4 files exists...
-            if nc_file and (rc==0):
-                LOG.debug("\tSuccessfully converted {} to {}.".format(
-                    os.path.basename(hdf_file),
-                    os.path.basename(nc_file[0])))
-                nc_files.append(nc_file[0])
-                nc_files_rc.append(0)
-            else:
-                LOG.warning("\tProblem converting {} to {}".format(
-                    os.path.basename(hdf_file),
-                    os.path.basename(nc_filename)))
-                nc_files.append(None)
-                nc_files_rc.append(1)
-
-    return nc_files,nc_files_rc
-
-
-def create_l2_products(run_dir,geo_home,geocat_options,sat_obj):
-    """
-    run geocat to create the level 2 products
-    """
-
-    # Link the required files and directories into the work directory...
-    paths_to_link = [
-        os.path.join(geo_home,'l2/{}'.format(sat_obj.geocat_name)),
-        os.path.join(geo_home,'l2/data'),
-        os.path.join(geo_home,'l2/data_algorithms'),
-        os.path.join(geo_home,'l2/geocat.default'),
-        geocat_options['tmp_dir'],
-        sat_obj.input_dir
-    ]
-    number_linked = link_files(run_dir, paths_to_link)
-
-    # Run geocat with the specified command line options
-    LOG.info("Executing geocat for the area file {} ...".format(sat_obj.input_filename))
-
-    '''
-    To deliberately throw a segfault for testing, we can set...
-
-        cmd = 'echo "This is a test cmd to throw a segfault..." ; kill -11 $$'
-
-    or compile a custom C exe...
-
-        echo "int main() { *((char *)0) = 0; }" > segfault_get.c
-        gcc segfault_get.c -o segfault_get
-
-    and then set...
-
-        cmd = '/mnt/WORK/work_dir/test_data/sample_data/segfault_get'
-
-    which should generate a return code of -11 (segfault).
-    '''
-
-    # Scrape some info from the input file...
-    sat_obj.get_input_file_metadata()
-
-    # Setting satellite viewport
-    sat_obj.get_image_limits()
-
-    # Generate the segmentation information for this image
-    sat_obj.generate_segments()
-
-    for seg_key in sat_obj.segment_data['segment_keys']:
-        ystart  = sat_obj.segment_data[seg_key]['ystart']
-        yend    = sat_obj.segment_data[seg_key]['yend']
-        xstart  = sat_obj.segment_data[seg_key]['xstart']
-        xend    = sat_obj.segment_data[seg_key]['xend']
-        xstride = sat_obj.segment_data[seg_key]['xstride']
-        seg_dir = sat_obj.segment_data[seg_key]['seg_dir']
-        LOG.debug("{:6s} -> ystart : {:5d}, yend : {:5d}, xstart : {:5d}, xend : {:5d}, xstride : {:3d}, seg_dir : {}"
-                .format(seg_key,ystart, yend, xstart, xend, xstride, seg_dir))
-
-    num_segments = len(sat_obj.segment_data['segment_keys'])
-
-    # Set the various geocat options.
-    sat_obj.set_satellite_options()
-
-    # Make the required segment directories...
-    for seg_key in sat_obj.segment_data['segment_keys']:
-        seg_dir = os.path.join(geocat_options['tmp_dir'],sat_obj.segment_data[seg_key]['seg_dir'])
-        if os.path.isdir(seg_dir) :
-            LOG.debug("Removing existing segment directory: {}".format(seg_dir))
-            shutil.rmtree(seg_dir)
-        LOG.debug("Creating the segment directory: {}".format(seg_dir))
-        os.makedirs(seg_dir)
-
-    # A couple of commands which fail to produce output...
-    #sat_obj.cmd['seg_2'] = 'sleep 0.5'
-    #sat_obj.cmd['seg_2'] = 'sleep 0.5; exit 1'
-    #sat_obj.cmd = {x:'sleep 0.5; exit 1' for x in sat_obj.segment_data['segment_keys']}
-    #sat_obj.cmd['seg_2'] = '/mnt/WORK/work_dir/segfault_test/segfault_get'
-    #sat_obj.cmd = {x:'sleep 0.5; echo "geocat>> Cannot create HDF writing for SDS, cloud_spherical_albedo - aborting."' for x in sat_obj.segment_data['segment_keys']}
-
-    # Construct a list of task dicts...
-    geocat_tasks = []
-    for seg_key in sat_obj.segment_data['segment_keys']:
-        cmd = sat_obj.cmd[seg_key]
-        env_vars = sat_obj.env_vars
-        LOG.debug("geocat command...\n\n{}\n".format(cmd))
-        geocat_tasks.append({'segment':seg_key,'run_dir':run_dir,'cmd':cmd,
-            'env_vars':env_vars})
-
-
-    current_dir = os.getcwd()
-
-    startTime = time.time()
-
-    os.chdir(run_dir)
-
-
-    # Setup the processing pool
-    cpu_count = multiprocessing.cpu_count()
-    LOG.info('There are {} available CPUs'.format(cpu_count))
+    # assign the granule start and end boundary times to the class members 
+    #granuleStartTime = startBoundary
+    #granuleEndTime = endBoundary
     
-    requested_cpu_count = geocat_options['num_cpu']
-    LOG.info('We have requested {} CPUs'.format(requested_cpu_count))
+    # multiply the granule number by the granule size
+    # then divide by 10^5 to convert the microseconds to tenths of a second; 
+    # the integer division will give the desired floor value.
+    timeCode = int(float(granuleNumber * granuleSize) / 100000.)
+
+    N_Granule_ID = 'NPP{0:0>12d}'.format(timeCode)
+
+    return N_Granule_ID
+
+def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
+    '''
+    Computes a datetime object from "filename" using the regex "pattern", and determines the 
+    elapsed time since "epoch".
+    '''
+    # Compile the regular expression for the filename...
+    re_pattern = re.compile(pattern)
+
+    # Get some information based on the filename
+    file_basename = os.path.basename(filename)
+    LOG.debug("file_basename = {}".format(file_basename))
+    file_info = dict(re_pattern.match(file_basename).groupdict())
+    LOG.debug("file_info = {}".format(file_info))
+
+    # Determine the granule ID.
+    dt_string = "{}_{}".format(file_info['date'],file_info['start_time'])
+    LOG.debug("dt_string = {}".format(dt_string))
+    dt = datetime.strptime(dt_string,"%Y%m%d_%H%M%S%f")
+    LOG.debug("dt = {}".format(dt))
+    leap_seconds = int(get_leapseconds(leapsec_dt_list,dt))
+    LOG.debug("leap_seconds = {}".format(leap_seconds))
+    iet_time = int(((dt - epoch).total_seconds() + leap_seconds) * 1000000.)
+    LOG.debug("iet_time = {}".format(iet_time))
+    granule_id = get_granule_ID(iet_time)
+
+    return granule_id, file_info, dt
+
+def get_leapsec_table(leapsecond_dir):
+    '''
+    Read the IETTime.dat file containing the leap seconds since 1972, and save into a list of dicts.
+    '''
+
+    months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    month_enum = {item:idx for idx,item in enumerate(months, start=1)}
+    #_, afire_ancil_path = check_and_convert_env_var('AFIRE_ANCIL_PATH')
+    leapsec_filename = os.path.join(leapsecond_dir,'IETTime.dat')
+    try:
+        leapsec_file = open(leapsec_filename,"ro") # Open template file for reading
+    except Exception, err :
+        LOG.error("{}, aborting.".format(err))
+
+    leapsec_dt_list = []
+    for line in leapsec_file.readlines():
+        line = line.replace("\n","")
+        fields = line.split(" ")
+        fields = filter(lambda x: x != '', fields)
+        year = int(fields[0])
+        month = month_enum[fields[1]]
+        day = int(fields[2])
+        leap_secs = int(float(fields[6]))
+        leap_dt = datetime(year,month,day)
+        leapsec_dt_list.append({'dt':leap_dt, 'leapsecs':leap_secs})
+    leapsec_file.close()
+
+    return leapsec_dt_list
+
+def get_leapseconds(leapsec_table, dt):
+    '''
+    Compares a datetime object to those in a table, and returns the correct number
+    of leapseconds to add to the epoch time.
+    '''
+    leap_seconds = 0
+    delta = 0
+
+    for leapsec_dict in leapsec_table:
+        temp_leap_seconds = leapsec_dict['leapsecs']
+        delta = (dt - leapsec_dict['dt']).total_seconds()
+        if delta < 0:
+            return leap_seconds
+        leap_seconds = temp_leap_seconds
+
+    return leap_seconds
+
+def generate_file_list(inputs, afire_options, full=False):
+    '''
+    Trawl through the files and directories given at the command line, pick out those matching the 
+    desired file types, and att them to a master list of raw data files. This list need not be 
+    sorted into time order.
+    '''
+
+    input_files = []
+
+    for input in inputs:
+        LOG.debug("bash glob input = {}".format(input))
+
+    if full:
+        input_files = list(set(inputs))
+        input_files.sort()
+        return input_files
+
+    input_prefixes = ['GMTCO','SVM05','SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
+
+    input_dirs = []
+    input_files = []
+
+    # Sort the command line inputs into directory and file inputs...
+    for input in inputs:
+        input = os.path.abspath(os.path.expanduser(input))
+        if os.path.isdir(input) :
+            # Input file glob is of form "/path/to/files"
+            LOG.debug("Input {} is a directory containing files...".format(input))
+            input_dirs.append(input)
+        elif os.path.isfile(input) :
+            ## Input file glob is of form "/path/to/files/goes13_1_2015_143_1745.input"
+            LOG.debug("Input {} is a file.".format(input))
+            input_files.append(input)
+
+    input_dirs = list(set(input_dirs))
+    input_dirs.sort()
+    input_files = list(set(input_files))
+    input_files.sort()
+
+    for dirs in input_dirs:
+        LOG.info("input dirs {}".format(dirs))
+    for files in input_files:
+        LOG.info("input files {}".format(files))
+
+
+    # The re defining the fields of an NPP CDFCB-format filename
+    RE_NPP_list = ['(?P<kind>[A-Z]+)(?P<band>[0-9]*)_',
+            '(?P<sat>[A-Za-z0-9]+)_','d(?P<date>\d+)_',
+            't(?P<start_time>\d+)_',
+            'e(?P<end_time>\d+)_b(?P<orbit>\d+)_',
+            'c(?P<created_time>\d+)_',
+            '(?P<site>[a-zA-Z0-9]+)_',
+            '(?P<domain>[a-zA-Z0-9]+)\.h5']
+    RE_NPP_str = "".join(RE_NPP_list)
     
-    if requested_cpu_count > cpu_count:
-        LOG.warn('{} requested CPUs is created than available, using {}'.format(
-            requested_cpu_count,cpu_count))
-        cpus_to_use = cpu_count
-    else:
-        cpus_to_use = requested_cpu_count
+    # Get a table of the leap seconds
+    iet_epoch = datetime(1958,1,1)
+    LOG.debug("Epoch time: {}".format(iet_epoch))
+    leapsec_dt_list = get_leapsec_table(afire_options['ancil_dir'])
+
+    # Loop through the input dirs and record any desired files in any of these directories
+
+    data_dict = {}
+    for dirs in input_dirs:
+        for input_prefix in input_prefixes:
+            input_glob = '{}*.h5'.format(input_prefix)
+            input_glob = os.path.join(dirs, input_glob)
+            LOG.debug("input glob is {}".format(input_glob))
+            temp_input_files = glob(input_glob)
+            temp_input_files.sort()
+            LOG.debug("temp_input_files {}".format(temp_input_files))
+
+            for files in temp_input_files:
+
+                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, 
+                        leapsec_dt_list)
+
+                LOG.debug("granule_id = {}".format(granule_id))
+
+                kind_key = '{}{}'.format(file_info['kind'],file_info['band'])
+                try:
+                    data_dict[granule_id][kind_key] = file_info
+                except KeyError:
+                    LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(granule_id))
+                    data_dict[granule_id] = {}
+                    data_dict[granule_id][kind_key] = file_info
+
+                data_dict[granule_id][kind_key]['file'] = files
+                data_dict[granule_id][kind_key]['dt'] = dt
+
+    # Loop through the input files, determine their dirs, and sweep up of the files in those dirs
+    # that share granule ids with the command line inputs.
+
+    # Get the granule ids of the files given in the input
+    granule_id_from_files = []
+
+    for files in input_files:
+        LOG.debug("input file: {}".format(files))
+
+        granule_id,_,_ = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, leapsec_dt_list)
+        LOG.debug("granule_id = {}".format(granule_id))
+        granule_id_from_files.append(granule_id)
+
+    granule_id_from_files = list(set(granule_id_from_files))
+    granule_id_from_files.sort()
+
+    for granule_id in granule_id_from_files:
+        LOG.debug("granule_id from files: {}".format(granule_id))
+
+    # Loop through the input files and determine the dirs in which they are contained
+    input_dirs_from_files = []
+    for files in input_files:
+        input_dirs_from_files.append(os.path.dirname(files))
+
+    input_dirs_from_files = list(set(input_dirs_from_files))
+    input_dirs_from_files.sort()
+
+    for dirs in input_dirs_from_files:
+        LOG.debug("input dirs from files: {}".format(dirs))
+
+    # Have any of the input dirs from the file inputs already been covered by the dir inputs?
+    # If yes, remove the dupes.
+    LOG.debug("original input dirs from files: {}".format(input_dirs_from_files))
+    for dirs in input_dirs_from_files:
+        if dirs in input_dirs:
+            LOG.debug("input dirs from files '{}' already in input_dirs".format(dirs,input_dirs))
+            input_dirs_from_files = filter(lambda x: x != dirs, input_dirs_from_files)
+
+    LOG.debug("filtered input dirs from files: {}".format(input_dirs_from_files))
+
+    for dirs in input_dirs_from_files:
+        for input_prefix in input_prefixes:
+            input_glob = '{}*.h5'.format(input_prefix)
+            input_glob = os.path.join(dirs, input_glob)
+            LOG.debug("input glob is {}".format(input_glob))
+            temp_input_files = glob(input_glob)
+            temp_input_files.sort()
+            LOG.debug("temp_input_files {}".format(temp_input_files))
+
+            for files in temp_input_files:
+
+                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, 
+                        leapsec_dt_list)
+
+                LOG.debug("granule_id = {}".format(granule_id))
+
+                if granule_id in granule_id_from_files:
+                    kind_key = '{}{}'.format(file_info['kind'],file_info['band'])
+                    try:
+                        data_dict[granule_id][kind_key] = file_info
+                    except KeyError:
+                        LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(granule_id))
+                        data_dict[granule_id] = {}
+                        data_dict[granule_id][kind_key] = file_info
+
+                    data_dict[granule_id][kind_key]['file'] = files
+                    data_dict[granule_id][kind_key]['dt'] = dt
+
+    return data_dict
+
+def construct_cmd_invocations(afire_data_dict):
+    '''
+    Take the list inputs, and construct the required command line invocations. Commands are of the 
+    form...
+
+    vfire GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
+        GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc AFIRE_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc \
+        metadata_id metadata_link time
+    '''
     
-    LOG.info('We are using {}/{} available CPUs'.format(cpus_to_use,cpu_count))
+    granule_id_list = afire_data_dict.keys()
+    granule_id_list.sort()
 
-    pool = multiprocessing.Pool(cpus_to_use)
+    for granule_id in granule_id_list:
 
-    timeout = 9999999
-    result_list = []
+        # Construct the land water mask filename
+        land_water_mask = os.path.basename(afire_data_dict[granule_id]['GMTCO']['file'])
+        land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc'.format(
+                afire_data_dict[granule_id]['GMTCO']['date'],
+                afire_data_dict[granule_id]['GMTCO']['start_time'],
+                afire_data_dict[granule_id]['GMTCO']['end_time'],
+                afire_data_dict[granule_id]['GMTCO']['orbit']
+                )
+        afire_data_dict[granule_id]['GRLWM'] = {'file':land_water_mask}
 
-    t_submit = time.time()
+        # Construct the output filename.
+        afire_output_file = 'AFIRE_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc'.format(
+                afire_data_dict[granule_id]['GMTCO']['date'],
+                afire_data_dict[granule_id]['GMTCO']['start_time'],
+                afire_data_dict[granule_id]['GMTCO']['end_time'],
+                afire_data_dict[granule_id]['GMTCO']['orbit']
+                )
+        afire_data_dict[granule_id]['AFIRE'] = {'file':afire_output_file}
 
-    LOG.info("Submitting {} image segments to the pool...".format(len(geocat_tasks)))
-    result_list = pool.map_async(afire_task_submitter, geocat_tasks).get(timeout)
+        # Construct the command line invocation
+        afire_data_dict[granule_id]['cmd'] = 'vfire {} {} {} {} {} {} {} {} {} '.format(
+                os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM16']['file']),
+                os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
+                os.path.basename(afire_data_dict[granule_id]['AFIRE']['file'])
+                )
+        afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
+                afire_data_dict[granule_id]['cmd'])
 
-    endTime = time.time()
+        # Construct the run directory name
+        afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFIRE_d{}_t{}_e{}_b{}_{}'.format(
+                afire_data_dict[granule_id]['GMTCO']['date'],
+                afire_data_dict[granule_id]['GMTCO']['start_time'],
+                afire_data_dict[granule_id]['GMTCO']['end_time'],
+                afire_data_dict[granule_id]['GMTCO']['orbit'],
+                granule_id
+                )
 
+        afire_data_dict[granule_id]['granule_id'] = granule_id
 
-    total_geocat_time = execution_time(startTime, endTime)
-    LOG.debug("geocat execution of {} took {:9.6f} seconds".format(sat_obj.input_filename,total_geocat_time['delta']))
-    LOG.info("\tgeocat execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
-        .format(sat_obj.input_filename, total_geocat_time['days'],total_geocat_time['hours'],
-            total_geocat_time['minutes'],total_geocat_time['seconds']))
+        # FIXME: Temporary!!!
+        anc_dir = afire_data_dict[granule_id]['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
+        afire_data_dict[granule_id]['anc_dir'] = anc_dir
 
-    # Open the geocat log file...
-    d = datetime.now()
-    timestamp = d.isoformat()
-
-    geocat_rc = []
-    geocat_hdf_rc = []
-    netcdf_rc = []
-    segment_rc = []
-
-    # Loop through each of the geocat results and convert the hdf files to netcdf
-    for result in result_list:
-        seg_key,geocat_seg_rc,exe_out = result
-        LOG.debug(">>> Segment {}: geocat_seg_rc = {}".format(seg_key,geocat_seg_rc))
-
-        # Did the actual geocat binary succeed?
-        if geocat_seg_rc != 0:
-            if geocat_seg_rc == None:
-                geocat_seg_rc = 0
-            else:
-                geocat_seg_rc = 1
-        geocat_rc.append(geocat_seg_rc)
-
-
-        logname = "{}_{}_{}.log".format(run_dir,seg_key,timestamp)
-        log_dir = os.path.dirname(run_dir)
-        logpath = os.path.join(log_dir, logname)
-        logfile_obj = open(logpath,'w')
-
-        # Write the geocat output to a log file, and parse it to determine the output
-        # HDF4 files.
-        hdf_files = []
-        for line in exe_out.splitlines():
-            logfile_obj.write(line+"\n")
-            searchObj = re.search( r'geocat[LR].*\.hdf', line, re.M)
-            if searchObj:
-                hdf_files.append(string.split(line," ")[-1])
-            else:
-                pass
-
-        logfile_obj.close()
-
-        # The run directory for this segment...
-        seg_dir = os.path.join(geocat_options['tmp_dir'],sat_obj.segment_data[seg_key]['seg_dir'])
-
-        LOG.debug("hdf_files = {}".format(hdf_files))
-
-        # Check the integrity of the geocat HDF4 files...
-        files_to_convert = []
-        bad_hdf = False
-        for hdf_file in hdf_files:
-            LOG.debug("\tseg_dir = {}".format(seg_dir))
-            hdf_file = os.path.abspath(os.path.join(seg_dir,os.path.basename(hdf_file)))
-            LOG.debug("\thdf_file = {}".format(hdf_file))
-            file_size = os.stat(hdf_file).st_size
-            LOG.debug("\tSize of HDF4 file {} is {} bytes".format(os.path.basename(hdf_file),
-                file_size))
-            if file_size < 10000:
-                LOG.warn("\tSize of HDF4 file {} is too small, possible geocat problem"
-                        .format(os.path.basename(hdf_file)))
-                LOG.warn("\tRemoving possibly corrupted HDF4 file {} from the cache."
-                        .format(os.path.basename(hdf_file)))
-                os.unlink(hdf_file)
-                bad_hdf = True
-            else:
-                files_to_convert.append(hdf_file)
-
-        if bad_hdf:
-            geocat_hdf_rc.append(1)
-        else:
-            geocat_hdf_rc.append(0)
-
-        LOG.debug("HDF4 files to convert: {}".format(files_to_convert))
-
-
-        # If the HDF4 files are OK, convert to NetCDF4...
-        if geocat_hdf_rc[-1] == 0:
-
-            LOG.debug("hdf_files : {}".format(files_to_convert))
-            LOG.debug("seg_dir : {}".format(seg_dir))
-            
-            max_attempts = 3
-            num_attempts = 0
-            while True:
-                num_attempts += 1
-                if num_attempts > 3:
-                    LOG.error("Maximum of {} conversion attempts reached.".format(max_attempts))
-                    break
-                else:
-                    LOG.debug("Conversion attempt {} ...".format(num_attempts))
-                    nc_l2_files,nc_l2_files_rc = hdf4_to_netcdf4(seg_dir, files_to_convert)
-
-                    if nc_l2_files==[] or (1 in nc_l2_files_rc):
-                        LOG.warn("Conversion attempt {} failed, trying again...".format(num_attempts))
-                        time.sleep(5.)
-                    else:
-                        break
-
-            LOG.debug("Converted files: {}".format(nc_l2_files))
-            
-            if nc_l2_files==[] or (1 in nc_l2_files_rc):
-
-                LOG.warn("HDF4 files were not converted to NetCDF4 for : {}\n".format(files_to_convert))
-                netcdf_rc.append(1)
-
-            else:
-
-                nc_l2_files_new = sat_obj.nc_filename_from_geocat_filename(nc_l2_files)
-
-                for old_file,new_file in zip(nc_l2_files,nc_l2_files_new):
-                    new_filename = os.path.basename(new_file).replace(".nc","_{}.nc".format(seg_key))
-                    new_filename = os.path.join(run_dir,new_filename)
-                    LOG.debug("Moving {} to {} ({})".format(old_file,new_filename,run_dir))
-                    shutil.move(old_file,new_filename)
-                LOG.debug("nc_l2_files : {}\n".format(nc_l2_files))
-                netcdf_rc.append(0)
-
-        else:
-            netcdf_rc.append(0)
-
-    # Boolean "and" the rc arrays, to get a final pass/fail for each segment...
-    LOG.debug("geocat_rc:     {}".format(geocat_rc))
-    LOG.debug("geocat_hdf_rc: {}".format(geocat_hdf_rc))
-    LOG.debug("netcdf_rc:     {}".format(netcdf_rc))
-
-    segment_rc = np.array(geocat_rc,    dtype='bool') + \
-                 np.array(geocat_hdf_rc,dtype='bool') + \
-                 np.array(netcdf_rc,    dtype='bool')
-
-    segment_rc = np.array(segment_rc,dtype='int')
-
-    os.chdir(current_dir)
-
-
-    # Check that we have successfully converted all segments to NetCDF4...
-    LOG.debug("num_segments: {}".format(num_segments))
-    LOG.debug("segment_rc: {}".format(segment_rc))
-
-    # There has been a failure somewhere along the line...
-    rc = 0
-    if np.sum(segment_rc) != 0:
-
-        if np.sum(geocat_rc) != 0:
-            rc = 1
-            for segment in range(num_segments):
-                if geocat_rc[segment] != 0:
-                    LOG.error("Execution of geocat failed to complete for segment {}".format(segment))
-
-        if np.sum(geocat_hdf_rc) != 0:
-            for segment in range(num_segments):
-                if geocat_hdf_rc[segment] != 0:
-                    LOG.error("geocat output HDF4 file may be corrupted for segment {}".format(segment))
-
-        if np.sum(netcdf_rc) != 0:
-            for segment in range(num_segments):
-                if netcdf_rc[segment] != 0:
-                    LOG.error("HDF4 to NetCDF4 ouput file conversion failed for segment {}".format(segment))
-
-        stitched_l1_rc = 0
-        stitched_l2_rc = 0
-
-    else:
-
-        # Stitch the files together...
-        geocat_l1_files = glob(os.path.join(run_dir,"geocatL1*.nc"))
-        geocat_l2_files = glob(os.path.join(run_dir,"geocatL2*.nc"))
-        geocat_l1_files.sort()
-        geocat_l2_files.sort()
-        LOG.debug("geocat_l1_files: {}".format(geocat_l1_files))
-        LOG.debug("geocat_l2_files: {}".format(geocat_l2_files))
-
-        stitched_dir = geocat_options['work_dir']
-        segments = [geocat_options['seg_rows'], geocat_options['seg_cols']]
-
-        if geocat_l1_files != [] :
-            filename = os.path.basename(geocat_l1_files[0])
-            stitched_filename = os.path.join(stitched_dir,"{}.nc".format(filename.split("_")[0]))
-            LOG.debug("Stitched level 1 file = {}".format(stitched_filename))
-            stitched_l1_rc = stitch_files(geocat_l1_files,segments,stitched_filename)
-        else:
-            stitched_l1_rc = 1
-
-        if geocat_l2_files != [] :
-            filename = os.path.basename(geocat_l2_files[0])
-            stitched_filename = os.path.join(stitched_dir,"{}.nc".format(filename.split("_")[0]))
-            LOG.debug("Stitched level 2 file = {}".format(stitched_filename))
-            stitched_l2_rc = stitch_files(geocat_l2_files,segments,stitched_filename)
-        else:
-            stitched_l2_rc = 1
-
-
-
-    return rc,segment_rc,stitched_l1_rc,stitched_l2_rc
+    return afire_data_dict
