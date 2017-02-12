@@ -320,7 +320,6 @@ def construct_cmd_invocations(afire_data_dict):
     for granule_id in granule_id_list:
 
         # Construct the land water mask filename
-        land_water_mask = os.path.basename(afire_data_dict[granule_id]['GMTCO']['file'])
         land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc'.format(
                 afire_data_dict[granule_id]['GMTCO']['date'],
                 afire_data_dict[granule_id]['GMTCO']['start_time'],
@@ -339,7 +338,7 @@ def construct_cmd_invocations(afire_data_dict):
         afire_data_dict[granule_id]['AFIRE'] = {'file':afire_output_file}
 
         # Construct the command line invocation
-        afire_data_dict[granule_id]['cmd'] = 'vfire {} {} {} {} {} {} {} {} {} '.format(
+        afire_data_dict[granule_id]['cmd'] = './vfire {} {} {} {} {} {} {} {} {} '.format(
                 os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
                 os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
                 os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
@@ -352,6 +351,9 @@ def construct_cmd_invocations(afire_data_dict):
                 )
         afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
                 afire_data_dict[granule_id]['cmd'])
+        #afire_data_dict[granule_id]['cmd'] = 'sleep 0.5; echo "Executing {0:}"; exit 0'.format(granule_id)
+        #afire_data_dict[granule_id]['cmd'] = 'sleep 1; echo "Executing {}"; exit 0'.format(granule_id)
+        #afire_data_dict[granule_id]['cmd'] = 'echo "Executing {0:}..."; python -c "import numpy as np; import time; t = 0.5 * np.random.randn() + 5.; time.sleep(t)"; echo "Completed {0:}"; exit 0'.format(granule_id)
 
         # Construct the run directory name
         afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFIRE_d{}_t{}_e{}_b{}_{}'.format(
@@ -363,9 +365,5 @@ def construct_cmd_invocations(afire_data_dict):
                 )
 
         afire_data_dict[granule_id]['granule_id'] = granule_id
-
-        # FIXME: Temporary!!!
-        anc_dir = afire_data_dict[granule_id]['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
-        afire_data_dict[granule_id]['anc_dir'] = anc_dir
 
     return afire_data_dict

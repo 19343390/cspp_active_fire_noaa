@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # encoding: utf-8
 """
@@ -22,20 +21,33 @@ import types
 import fileinput
 import traceback
 from subprocess import Popen, CalledProcessError, call, PIPE
+import multiprocessing
 from datetime import datetime
 
 import log_common
-from utils import link_files, execute_binary_captured_inject_io
+from utils import link_files, execution_time, execute_binary_captured_inject_io, cleanup
 
-def afire_work_unit(args):
+#import ancillary
+from ancillary import get_lwm
+#from ancillary import GridIP
+
+LOG = logging.getLogger('dispatcher')
+
+def afire_submitter(args):
     '''
     This routine encapsulates the single unit of work, multiple instances which are submitted to
-    the multiprocessing queue.
+    the multiprocessing queue. It takes as input whatever is required to complete the work unit,
+    and returns return values and output logging from the external process.
     '''
 
-    granule_id = args['granule_id']
-    run_dir = args['run_dir']
-    cmd = args['cmd']
+    granule_dict = args['granule_dict']
+    afire_home = args['afire_home']
+    afire_options = args['afire_options']
+
+    granule_id = granule_dict['granule_id']
+    run_dir = granule_dict['run_dir']
+    cmd = granule_dict['cmd']
+    work_dir = afire_options['work_dir']
     env_vars = {}
 
     rc = 0
@@ -43,13 +55,18 @@ def afire_work_unit(args):
 
     LOG.debug("granule_id = {}".format(granule_id))
     LOG.debug("run_dir = {}".format(run_dir))
-    LOG.debug("env_vars = {}".format(env_vars))
     LOG.debug("cmd = {}".format(cmd))
+    LOG.debug("work_dir = {}".format(work_dir))
+    LOG.debug("env_vars = {}".format(env_vars))
+
+    current_dir = os.getcwd()
+    LOG.debug("We are in {}".format(os.getcwd()))
 
     # Create the run dir for this input file
     log_idx = 0
+    LOG.debug("Creating a run dir...")
     while True:
-        run_dir = os.path.join(work_dir,"{}_run_{}".format(run_dir,log_idx))
+        run_dir = os.path.join(work_dir,"{}_run_{}".format(granule_dict['run_dir'],log_idx))
         if not os.path.exists(run_dir):
             os.makedirs(run_dir)
             break
@@ -58,89 +75,82 @@ def afire_work_unit(args):
 
     LOG.debug("run_dir = {}".format(run_dir))
 
+    os.chdir(run_dir)
+    LOG.debug("We are in {}".format(os.getcwd()))
 
     # Download and stage the required ancillary data for this input file
     LOG.info("Staging the required ancillary data...")
-    #rc_ancil = stage_ancillary(afire_home, cache_dir, run_dir, input_file, input_dt, afire_options)
-    #if rc_ancil != 0:
-        #LOG.warn('Ancillary retrieval failed for input file {}, proceeding...'.format(input_file))
-        #problem_runs.append(input_file)
-        #continue
-
-    if not afire_options['ancillary_only']:
-        rc,segment_rc,stitched_l1_rc,stitched_l2_rc = \
-                create_l2_products(run_dir, afire_home, afire_options, sat_obj)
-    else:
-        LOG.info("Ancillary ingest only, skipping geocat execution.")
-        rc = 0
-        segment_rc = [0]
-        stitched_l1_rc = 0
-        stitched_l2_rc = 0
-
-    if rc != 0 :
-        crashed_runs.append(input_file)
-    elif np.sum(segment_rc) != 0 :
+    rc_ancil, anc_dir = get_lwm(afire_options, granule_dict)
+    if rc_ancil != 0:
+        LOG.warn('Ancillary retrieval failed for granule_id {}, proceeding...'.format(granule_id))
         problem_runs.append(input_file)
-    elif stitched_l1_rc != 0 or stitched_l2_rc != 0 :
-        problem_runs.append(input_file)
-    else:
-        successful_runs.append(input_file)
-        if afire_options['docleanup']:
-            cleanup(work_dir, [run_dir])
+        return 1
+    LOG.info("Persistent anc_dir['{}'] = {}".format(granule_id, anc_dir))
+    lwm_file = os.path.join(afire_options['cache_dir'], anc_dir, granule_dict['GRLWM']['file'])
+    LOG.info("lwm file to link = {}".format(lwm_file))
+    #for key in granule_dict.keys():
+        #LOG.info("{} : {} = {}".format(granule_id, key, granule_dict[key]))
 
-    LOG.info(">>> Completed processing input file {}\n".format(input_file))
-
-    '''
     # Link the required files and directories into the work directory...
     paths_to_link = [
-        os.path.join(afire_home,'l2/{}'.format(sat_obj.geocat_name)),
-        os.path.join(afire_home,'l2/data'),
-        os.path.join(afire_home,'l2/data_algorithms'),
-        os.path.join(afire_home,'l2/geocat.default'),
-        geocat_options['tmp_dir'],
-        sat_obj.input_dir
-    ]
-
+        os.path.join(afire_home,'vendor/vfire'),
+        lwm_file,
+    ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
     number_linked = link_files(run_dir, paths_to_link)
+
     # Contruct a dictionary of error conditions which should be logged.
     error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
                   'ERROR', 'error', 'ERR', 'err',
                   'ABORTING', 'aborting', 'ABORT','abort']
-    error_keys = ['Temporal_Failure'] + error_keys
     error_dict = {x:{'pattern':x, 'count_only':False, 'count':0, 'max_count':None, 'log_str':''}
             for x in error_keys}
     error_dict['error_keys'] = error_keys
-    error_dict['Temporal_Failure'] = {
-            'pattern':'SYSTEM_BRIDGE_FOG_SERVICES:Have_Fog_Temporal_Data(FAILURE)',
-            'count_only':False,
-            'count':0,
-            'max_count':0,
-            'log_str':'{} Temporal failures for segment {}.'}
+
+    start_time = time.time()
 
     rc, exe_out = execute_binary_captured_inject_io(
             run_dir, cmd, error_dict,
             log_execution=False, log_stdout=False, log_stderr=False,
             **env_vars)
 
-    for error_key in ['Temporal_Failure']:
-        msg_count = error_dict[error_key]['count']
-        if msg_count != 0:
-            LOG.warn(error_dict[error_key]['log_str'].format(msg_count, segment))
+    end_time = time.time()
+
+    afire_time = execution_time(start_time, end_time)
+    LOG.debug("afire execution of {} took {:9.6f} seconds".format(granule_id, afire_time['delta']))
+    LOG.info("\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
+        .format(granule_id, afire_time['days'],afire_time['hours'],
+            afire_time['minutes'],afire_time['seconds']))
 
     LOG.debug(" Granule ID: {}, rc = {}".format(granule_id, rc))
-    '''
+
+    os.chdir(current_dir)
+    LOG.debug("We are in {}".format(os.getcwd()))
+
+    # Write the afire output to a log file, and parse it to determine the output
+    d = datetime.now()
+    timestamp = d.isoformat()
+    logname = "{}_{}.log".format(run_dir, timestamp)
+    log_dir = os.path.dirname(run_dir)
+    logpath = os.path.join(log_dir, logname)
+    logfile_obj = open(logpath,'w')
+    for line in exe_out.splitlines():
+        logfile_obj.write(line+"\n")
+    logfile_obj.close()
+
+    # If no problems, remove the run dir
+    if (rc == 0) and afire_options['docleanup']:
+            cleanup(work_dir, [run_dir])
 
     return [granule_id, rc, exe_out]
 
 
-def afire_dispatcher(afire_home, afire_options):
+def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     """
-    run active fires to create the level 2 products
+    Run active fires to create the level 2 products
     """
 
-
-    # Run geocat with the specified command line options
-    LOG.info("Executing geocat for the area file {} ...".format(sat_obj.input_filename))
+    granule_id_list = afire_data_dict.keys()
+    granule_id_list.sort()
 
     '''
     To deliberately throw a segfault for testing, we can set...
@@ -168,26 +178,17 @@ def afire_dispatcher(afire_home, afire_options):
 
     # Construct a list of task dicts...
     afire_tasks = []
-    for seg_key in sat_obj.segment_data['segment_keys']:
-        cmd = sat_obj.cmd[seg_key]
-        env_vars = sat_obj.env_vars
-        LOG.debug("geocat command...\n\n{}\n".format(cmd))
-        afire_tasks.append({'segment':seg_key,'run_dir':run_dir,'cmd':cmd,
-            'env_vars':env_vars})
-
-
-    current_dir = os.getcwd()
-
-    startTime = time.time()
-
-    os.chdir(run_dir)
-
+    for granule_id in granule_id_list:
+        args = {'granule_dict':afire_data_dict[granule_id],
+                'afire_home':afire_home,
+                'afire_options':afire_options}
+        afire_tasks.append(args)
 
     # Setup the processing pool
     cpu_count = multiprocessing.cpu_count()
     LOG.info('There are {} available CPUs'.format(cpu_count))
     
-    requested_cpu_count = geocat_options['num_cpu']
+    requested_cpu_count = afire_options['num_cpu']
     LOG.info('We have requested {} CPUs'.format(requested_cpu_count))
     
     if requested_cpu_count > cpu_count:
@@ -204,209 +205,35 @@ def afire_dispatcher(afire_home, afire_options):
     timeout = 9999999
     result_list = []
 
-    t_submit = time.time()
+    start_time = time.time()
 
     LOG.info("Submitting {} image segments to the pool...".format(len(afire_tasks)))
-    result_list = pool.map_async(afire_task_submitter, afire_tasks).get(timeout)
+    result_list = pool.map_async(afire_submitter, afire_tasks).get(timeout)
 
-    endTime = time.time()
+    end_time = time.time()
 
 
-    total_geocat_time = execution_time(startTime, endTime)
-    LOG.debug("geocat execution of {} took {:9.6f} seconds".format(sat_obj.input_filename,total_geocat_time['delta']))
-    LOG.info("\tgeocat execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
-        .format(sat_obj.input_filename, total_geocat_time['days'],total_geocat_time['hours'],
-            total_geocat_time['minutes'],total_geocat_time['seconds']))
+    total_afire_time = execution_time(start_time, end_time)
+    LOG.debug("afire execution took {:9.6f} seconds".format(total_afire_time['delta']))
+    LOG.info("\tafire execution took {} days, {} hours, {} minutes, {:8.6f} seconds"
+        .format(total_afire_time['days'],total_afire_time['hours'],
+            total_afire_time['minutes'],total_afire_time['seconds']))
 
-    # Open the geocat log file...
+    # Open the afire log file...
     d = datetime.now()
     timestamp = d.isoformat()
 
-    geocat_rc = []
-    geocat_hdf_rc = []
-    netcdf_rc = []
-    segment_rc = []
+    rc_dict = {}
 
-    # Loop through each of the geocat results and convert the hdf files to netcdf
+    # Loop through each of the afire results and convert the hdf files to netcdf
     for result in result_list:
-        seg_key,geocat_seg_rc,exe_out = result
-        LOG.debug(">>> Segment {}: geocat_seg_rc = {}".format(seg_key,geocat_seg_rc))
+        granule_id, afire_rc, exe_out = result
+        LOG.debug(">>> granule_id {}: afire_rc = {}".format(granule_id, afire_rc))
 
-        # Did the actual geocat binary succeed?
-        if geocat_seg_rc != 0:
-            if geocat_seg_rc == None:
-                geocat_seg_rc = 0
-            else:
-                geocat_seg_rc = 1
-        geocat_rc.append(geocat_seg_rc)
-
-
-        logname = "{}_{}_{}.log".format(run_dir,seg_key,timestamp)
-        log_dir = os.path.dirname(run_dir)
-        logpath = os.path.join(log_dir, logname)
-        logfile_obj = open(logpath,'w')
-
-        # Write the geocat output to a log file, and parse it to determine the output
-        # HDF4 files.
-        hdf_files = []
-        for line in exe_out.splitlines():
-            logfile_obj.write(line+"\n")
-            searchObj = re.search( r'geocat[LR].*\.hdf', line, re.M)
-            if searchObj:
-                hdf_files.append(string.split(line," ")[-1])
-            else:
-                pass
-
-        logfile_obj.close()
-
-        # The run directory for this segment...
-        seg_dir = os.path.join(geocat_options['tmp_dir'],sat_obj.segment_data[seg_key]['seg_dir'])
-
-        LOG.debug("hdf_files = {}".format(hdf_files))
-
-        # Check the integrity of the geocat HDF4 files...
-        files_to_convert = []
-        bad_hdf = False
-        for hdf_file in hdf_files:
-            LOG.debug("\tseg_dir = {}".format(seg_dir))
-            hdf_file = os.path.abspath(os.path.join(seg_dir,os.path.basename(hdf_file)))
-            LOG.debug("\thdf_file = {}".format(hdf_file))
-            file_size = os.stat(hdf_file).st_size
-            LOG.debug("\tSize of HDF4 file {} is {} bytes".format(os.path.basename(hdf_file),
-                file_size))
-            if file_size < 10000:
-                LOG.warn("\tSize of HDF4 file {} is too small, possible geocat problem"
-                        .format(os.path.basename(hdf_file)))
-                LOG.warn("\tRemoving possibly corrupted HDF4 file {} from the cache."
-                        .format(os.path.basename(hdf_file)))
-                os.unlink(hdf_file)
-                bad_hdf = True
-            else:
-                files_to_convert.append(hdf_file)
-
-        if bad_hdf:
-            geocat_hdf_rc.append(1)
-        else:
-            geocat_hdf_rc.append(0)
-
-        LOG.debug("HDF4 files to convert: {}".format(files_to_convert))
-
-
-        # If the HDF4 files are OK, convert to NetCDF4...
-        if geocat_hdf_rc[-1] == 0:
-
-            LOG.debug("hdf_files : {}".format(files_to_convert))
-            LOG.debug("seg_dir : {}".format(seg_dir))
-            
-            max_attempts = 3
-            num_attempts = 0
-            while True:
-                num_attempts += 1
-                if num_attempts > 3:
-                    LOG.error("Maximum of {} conversion attempts reached.".format(max_attempts))
-                    break
-                else:
-                    LOG.debug("Conversion attempt {} ...".format(num_attempts))
-                    nc_l2_files,nc_l2_files_rc = hdf4_to_netcdf4(seg_dir, files_to_convert)
-
-                    if nc_l2_files==[] or (1 in nc_l2_files_rc):
-                        LOG.warn("Conversion attempt {} failed, trying again...".format(num_attempts))
-                        time.sleep(5.)
-                    else:
-                        break
-
-            LOG.debug("Converted files: {}".format(nc_l2_files))
-            
-            if nc_l2_files==[] or (1 in nc_l2_files_rc):
-
-                LOG.warn("HDF4 files were not converted to NetCDF4 for : {}\n".format(files_to_convert))
-                netcdf_rc.append(1)
-
-            else:
-
-                nc_l2_files_new = sat_obj.nc_filename_from_geocat_filename(nc_l2_files)
-
-                for old_file,new_file in zip(nc_l2_files,nc_l2_files_new):
-                    new_filename = os.path.basename(new_file).replace(".nc","_{}.nc".format(seg_key))
-                    new_filename = os.path.join(run_dir,new_filename)
-                    LOG.debug("Moving {} to {} ({})".format(old_file,new_filename,run_dir))
-                    shutil.move(old_file,new_filename)
-                LOG.debug("nc_l2_files : {}\n".format(nc_l2_files))
-                netcdf_rc.append(0)
-
-        else:
-            netcdf_rc.append(0)
+        # Did the actual afire binary succeed?
+        rc_dict[granule_id] = afire_rc
 
     # Boolean "and" the rc arrays, to get a final pass/fail for each segment...
-    LOG.debug("geocat_rc:     {}".format(geocat_rc))
-    LOG.debug("geocat_hdf_rc: {}".format(geocat_hdf_rc))
-    LOG.debug("netcdf_rc:     {}".format(netcdf_rc))
+    LOG.debug("rc_dict:     {}".format(rc_dict))
 
-    segment_rc = np.array(geocat_rc,    dtype='bool') + \
-                 np.array(geocat_hdf_rc,dtype='bool') + \
-                 np.array(netcdf_rc,    dtype='bool')
-
-    segment_rc = np.array(segment_rc,dtype='int')
-
-    os.chdir(current_dir)
-
-
-    # Check that we have successfully converted all segments to NetCDF4...
-    LOG.debug("num_segments: {}".format(num_segments))
-    LOG.debug("segment_rc: {}".format(segment_rc))
-
-    # There has been a failure somewhere along the line...
-    rc = 0
-    if np.sum(segment_rc) != 0:
-
-        if np.sum(geocat_rc) != 0:
-            rc = 1
-            for segment in range(num_segments):
-                if geocat_rc[segment] != 0:
-                    LOG.error("Execution of geocat failed to complete for segment {}".format(segment))
-
-        if np.sum(geocat_hdf_rc) != 0:
-            for segment in range(num_segments):
-                if geocat_hdf_rc[segment] != 0:
-                    LOG.error("geocat output HDF4 file may be corrupted for segment {}".format(segment))
-
-        if np.sum(netcdf_rc) != 0:
-            for segment in range(num_segments):
-                if netcdf_rc[segment] != 0:
-                    LOG.error("HDF4 to NetCDF4 ouput file conversion failed for segment {}".format(segment))
-
-        stitched_l1_rc = 0
-        stitched_l2_rc = 0
-
-    else:
-
-        # Stitch the files together...
-        geocat_l1_files = glob(os.path.join(run_dir,"geocatL1*.nc"))
-        geocat_l2_files = glob(os.path.join(run_dir,"geocatL2*.nc"))
-        geocat_l1_files.sort()
-        geocat_l2_files.sort()
-        LOG.debug("geocat_l1_files: {}".format(geocat_l1_files))
-        LOG.debug("geocat_l2_files: {}".format(geocat_l2_files))
-
-        stitched_dir = geocat_options['work_dir']
-        segments = [geocat_options['seg_rows'], geocat_options['seg_cols']]
-
-        if geocat_l1_files != [] :
-            filename = os.path.basename(geocat_l1_files[0])
-            stitched_filename = os.path.join(stitched_dir,"{}.nc".format(filename.split("_")[0]))
-            LOG.debug("Stitched level 1 file = {}".format(stitched_filename))
-            stitched_l1_rc = stitch_files(geocat_l1_files,segments,stitched_filename)
-        else:
-            stitched_l1_rc = 1
-
-        if geocat_l2_files != [] :
-            filename = os.path.basename(geocat_l2_files[0])
-            stitched_filename = os.path.join(stitched_dir,"{}.nc".format(filename.split("_")[0]))
-            LOG.debug("Stitched level 2 file = {}".format(stitched_filename))
-            stitched_l2_rc = stitch_files(geocat_l2_files,segments,stitched_filename)
-        else:
-            stitched_l2_rc = 1
-
-
-
-    return rc,segment_rc,stitched_l1_rc,stitched_l2_rc
+    return rc_dict

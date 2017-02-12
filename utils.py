@@ -22,6 +22,7 @@ import time
 from glob import glob
 import types
 import fileinput
+import shutil
 from copy import copy
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime, timedelta
@@ -89,26 +90,6 @@ class AscLineParser(object):
     def time_from_tokens(self, day, time):
         dt = datetime.strptime(day + time, '%Y-%m-%d%H:%M:%S.%f')
         return dt
-
-#def link_ancillary_to_work_dir(work_dir, anc_path_seq):
-    #'''
-    #link ancillary files into work directory
-    #'''
-    #for src_path in anc_path_seq:
-        #_, src_name = os.path.split(src_path)
-        #tgt_path = os.path.abspath(os.path.join(work_dir, src_name))
-
-        #if not os.path.exists(tgt_path):
-            #LOG.debug('%r -> %r' % (src_name, src_path))
-            #os.symlink(src_path, tgt_path)
-        #else:
-            #LOG.info('%r already exists; continuing' % tgt_path)
-        #try:
-            #LOG.debug('testing %r' % tgt_path)
-            #s = os.stat(tgt_path)
-        #except OSError as oops:
-            #LOG.error("link at %r is broken" % tgt_path)
-            #raise
 
 def link_files(dest_path, files):
     '''
