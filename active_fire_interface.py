@@ -338,14 +338,14 @@ def construct_cmd_invocations(afire_data_dict):
         afire_data_dict[granule_id]['AFIRE'] = {'file':afire_output_file}
 
         # Construct the command line invocation
-        afire_data_dict[granule_id]['cmd'] = './vfire {} {} {} {} {} {} {} {} {} '.format(
-                os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
+        afire_data_dict[granule_id]['cmd'] = './vfire_static {} {} {} {} {} {} {} {} {} '.format(
                 os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
                 os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),
                 os.path.basename(afire_data_dict[granule_id]['SVM16']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
+                os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
+                os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
                 os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
                 os.path.basename(afire_data_dict[granule_id]['AFIRE']['file'])
                 )

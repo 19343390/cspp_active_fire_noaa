@@ -93,7 +93,7 @@ def afire_submitter(args):
 
     # Link the required files and directories into the work directory...
     paths_to_link = [
-        os.path.join(afire_home,'vendor/vfire'),
+        os.path.join(afire_home,'vendor/vfire_static'),
         lwm_file,
     ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
     number_linked = link_files(run_dir, paths_to_link)
