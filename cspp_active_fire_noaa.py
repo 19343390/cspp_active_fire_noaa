@@ -61,27 +61,14 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
     LOG.info('')
     LOG.info('>>> Input Files')
     LOG.info('')
+    label_format_str = '{:^20s}{:^30s}'
+    LOG.info(label_format_str.format("<Granule ID>", "<Granule Start Time>"))
     for granule_id in granule_id_list:
-        for file_kind in ['GMTCO','SVM05','SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']:
-            LOG.info('afire_data_dict[{}][{}] = {},{}'.format(
-                granule_id,
-                file_kind,
-                afire_data_dict[granule_id][file_kind]['dt'],
-                afire_data_dict[granule_id][file_kind]['file']
-                )
+        LOG.info(label_format_str.format(
+            granule_id,
+            str(afire_data_dict[granule_id]['GMTCO']['dt'])
             )
-        LOG.info('')
-
-    LOG.info('')
-    LOG.info('>>> Command Line Invocations')
-    LOG.info('')
-    for granule_id in granule_id_list:
-        LOG.info('granule_id[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['granule_id']))
-        LOG.info('dt[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['GMTCO']['dt']))
-        #LOG.info('anc_dir[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['anc_dir']))
-        LOG.info('anc_file[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['GRLWM']['file']))
-        LOG.info('run_dir[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['run_dir']))
-        LOG.info('cmd[{}] = {}'.format(granule_id, afire_data_dict[granule_id]['cmd']))
+        )
 
     # Clean out product cache files that are too old.
     LOG.info('')
@@ -91,15 +78,19 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
         clean_cache(afire_options['cache_dir'], afire_options['cache_window'], first_dt)
 
     # Run the dispatcher
-    rc_dict = afire_dispatcher(afire_home, afire_data_dict, afire_options)
-    LOG.info("rc_dict = {}".format(rc_dict))
+    rc_exe_dict, rc_problem_dict = afire_dispatcher(afire_home, afire_data_dict, afire_options)
+    LOG.debug("rc_exe_dict = {}".format(rc_exe_dict))
+    LOG.debug("rc_problem_dict = {}".format(rc_problem_dict))
 
+    # Populate the diagnostic granule ID lists
     for granule_id in granule_id_list:
         attempted_runs.append(granule_id)
-        if rc_dict[granule_id] == 0:
+        if rc_exe_dict[granule_id] == 0:
             successful_runs.append(granule_id)
         else:
             crashed_runs.append(granule_id)
+        if rc_problem_dict[granule_id] != 0:
+            problem_runs.append(granule_id)
 
     attempted_runs  = list(set(attempted_runs))
     successful_runs = list(set(successful_runs))

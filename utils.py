@@ -611,11 +611,11 @@ def create_dir(dir):
             else:
                 raise CsppEnvironment("Cannot create {}".format(returned_dir))
     except CsppEnvironment:
-        LOG.warning("Unable to create {}".format(returned_dir))
+        LOG.debug("Unable to create {}".format(returned_dir))
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except OSError:
-        LOG.warning("Unable to create new dir '{}' in {}".format(returned_dir_base,returned_cache_path))
+        LOG.debug("Unable to create new dir '{}' in {}".format(returned_dir_base,returned_cache_path))
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except Exception:

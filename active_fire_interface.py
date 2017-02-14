@@ -184,9 +184,9 @@ def generate_file_list(inputs, afire_options, full=False):
     input_files.sort()
 
     for dirs in input_dirs:
-        LOG.info("input dirs {}".format(dirs))
+        LOG.debug("input dirs {}".format(dirs))
     for files in input_files:
-        LOG.info("input files {}".format(files))
+        LOG.debug("input files {}".format(files))
 
 
     # The re defining the fields of an NPP CDFCB-format filename
@@ -337,7 +337,8 @@ def construct_cmd_invocations(afire_data_dict):
                 )
         afire_data_dict[granule_id]['AFIRE'] = {'file':afire_output_file}
 
-        # Construct the command line invocation
+        # Construct the command line invocation. As the "vfire" binary is currently constructed,
+        # The order of the inouts is important.
         afire_data_dict[granule_id]['cmd'] = './vfire_static {} {} {} {} {} {} {} {} {} '.format(
                 os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
                 os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),

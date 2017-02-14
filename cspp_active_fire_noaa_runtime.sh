@@ -31,6 +31,6 @@ export AFIRE_ANCIL_PATH=${CSPP_ACTIVE_FIRE_HOME}/static_ancillary
 if [ -z "$AFIRE_CACHE_PATH" ]; then
     echo "AFIRE_CACHE_PATH is not set"
 else
-    echo "AFIRE_CACHE_PATH is set to "$AFIRE_CACHE_PATH
+    #echo "AFIRE_CACHE_PATH is set to "$AFIRE_CACHE_PATH
     export AFIRE_CACHE_PATH=${AFIRE_CACHE_PATH}
 fi

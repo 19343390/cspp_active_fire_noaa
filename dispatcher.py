@@ -19,6 +19,7 @@ import logging
 import time
 import types
 import fileinput
+import shutil
 import traceback
 from subprocess import Popen, CalledProcessError, call, PIPE
 import multiprocessing
@@ -50,7 +51,8 @@ def afire_submitter(args):
     work_dir = afire_options['work_dir']
     env_vars = {}
 
-    rc = 0
+    rc_exe = 0
+    rc_problem = 0
     exe_out = "Finished the Active Fires"
 
     LOG.debug("granule_id = {}".format(granule_id))
@@ -108,7 +110,7 @@ def afire_submitter(args):
 
     start_time = time.time()
 
-    rc, exe_out = execute_binary_captured_inject_io(
+    rc_exe, exe_out = execute_binary_captured_inject_io(
             run_dir, cmd, error_dict,
             log_execution=False, log_stdout=False, log_stderr=False,
             **env_vars)
@@ -121,14 +123,14 @@ def afire_submitter(args):
         .format(granule_id, afire_time['days'],afire_time['hours'],
             afire_time['minutes'],afire_time['seconds']))
 
-    LOG.debug(" Granule ID: {}, rc = {}".format(granule_id, rc))
+    LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
 
     os.chdir(current_dir)
     LOG.debug("We are in {}".format(os.getcwd()))
 
     # Write the afire output to a log file, and parse it to determine the output
-    d = datetime.now()
-    timestamp = d.isoformat()
+    creation_dt = datetime.utcnow()
+    timestamp = creation_dt.isoformat()
     logname = "{}_{}.log".format(run_dir, timestamp)
     log_dir = os.path.dirname(run_dir)
     logpath = os.path.join(log_dir, logname)
@@ -137,11 +139,24 @@ def afire_submitter(args):
         logfile_obj.write(line+"\n")
     logfile_obj.close()
 
+    # Move the output file from the run_dir to the work_dir
+    old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
+    new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
+    new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
+    LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
+    try:
+        shutil.move(old_output_file, new_output_file)
+    except Exception:
+        rc_problem = 1
+        LOG.warning("Problem moving output file from {} to {}".format(
+            old_output_file, new_output_file))
+        LOG.debug(traceback.format_exc())
+
     # If no problems, remove the run dir
-    if (rc == 0) and afire_options['docleanup']:
+    if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
             cleanup(work_dir, [run_dir])
 
-    return [granule_id, rc, exe_out]
+    return [granule_id, rc_exe, rc_problem, exe_out]
 
 
 def afire_dispatcher(afire_home, afire_data_dict, afire_options):
@@ -207,7 +222,8 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
 
     start_time = time.time()
 
-    LOG.info("Submitting {} image segments to the pool...".format(len(afire_tasks)))
+    LOG.info("Submitting {} Active Fire {} to the pool...".format(len(afire_tasks),
+        "task" if len(afire_tasks) == 1 else "tasks"))
     result_list = pool.map_async(afire_submitter, afire_tasks).get(timeout)
 
     end_time = time.time()
@@ -219,21 +235,20 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
         .format(total_afire_time['days'],total_afire_time['hours'],
             total_afire_time['minutes'],total_afire_time['seconds']))
 
-    # Open the afire log file...
-    d = datetime.now()
-    timestamp = d.isoformat()
-
-    rc_dict = {}
+    rc_exe_dict = {}
+    rc_problem_dict = {}
 
     # Loop through each of the afire results and convert the hdf files to netcdf
     for result in result_list:
-        granule_id, afire_rc, exe_out = result
-        LOG.debug(">>> granule_id {}: afire_rc = {}".format(granule_id, afire_rc))
+        granule_id, afire_rc, problem_rc, exe_out = result
+        LOG.debug(">>> granule_id {}: afire_rc = {}, problem_rc = {}".format(
+            granule_id, afire_rc, problem_rc))
 
         # Did the actual afire binary succeed?
-        rc_dict[granule_id] = afire_rc
+        rc_exe_dict[granule_id] = afire_rc
+        rc_problem_dict[granule_id] = problem_rc
 
     # Boolean "and" the rc arrays, to get a final pass/fail for each segment...
-    LOG.debug("rc_dict:     {}".format(rc_dict))
+    LOG.debug("rc_exe_dict:     {}".format(rc_exe_dict))
 
-    return rc_dict
+    return rc_exe_dict, rc_problem_dict
