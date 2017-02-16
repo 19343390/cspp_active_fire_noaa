@@ -62,11 +62,9 @@ def afire_submitter(args):
     LOG.debug("env_vars = {}".format(env_vars))
 
     current_dir = os.getcwd()
-    LOG.debug("We are in {}".format(os.getcwd()))
 
     # Create the run dir for this input file
     log_idx = 0
-    LOG.debug("Creating a run dir...")
     while True:
         run_dir = os.path.join(work_dir,"{}_run_{}".format(granule_dict['run_dir'],log_idx))
         if not os.path.exists(run_dir):
@@ -75,88 +73,75 @@ def afire_submitter(args):
         else:
             log_idx += 1
 
-    LOG.debug("run_dir = {}".format(run_dir))
-
     os.chdir(run_dir)
-    LOG.debug("We are in {}".format(os.getcwd()))
-
-    '''>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'''
 
     # Download and stage the required ancillary data for this input file
-    LOG.info("Staging the required ancillary data...")
-    rc_ancil, anc_dir = get_lwm(afire_options, granule_dict)
-    if rc_ancil != 0:
-        LOG.warn('Ancillary retrieval failed for granule_id {}, proceeding...'.format(granule_id))
-        problem_runs.append(input_file)
-        return 1
-    LOG.info("Persistent anc_dir['{}'] = {}".format(granule_id, anc_dir))
-    lwm_file = os.path.join(afire_options['cache_dir'], anc_dir, granule_dict['GRLWM']['file'])
-    LOG.info("lwm file to link = {}".format(lwm_file))
-    #for key in granule_dict.keys():
-        #LOG.info("{} : {} = {}".format(granule_id, key, granule_dict[key]))
+    LOG.info("Staging the required ancillary data for granule_id {}...".format(granule_id))
+    rc_ancil, lwm_file = get_lwm(afire_options, granule_dict)
 
-    '''>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'''
-
-    # Link the required files and directories into the work directory...
-    paths_to_link = [
-        os.path.join(afire_home,'vendor/vfire_static'),
-        lwm_file,
-    ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
-    number_linked = link_files(run_dir, paths_to_link)
-
-    #return [granule_id, rc_exe, rc_problem, exe_out] ### Dummy!
-
-    # Contruct a dictionary of error conditions which should be logged.
-    error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
-                  'ERROR', 'error', 'ERR', 'err',
-                  'ABORTING', 'aborting', 'ABORT','abort']
-    error_dict = {x:{'pattern':x, 'count_only':False, 'count':0, 'max_count':None, 'log_str':''}
-            for x in error_keys}
-    error_dict['error_keys'] = error_keys
-
-    start_time = time.time()
-
-    rc_exe, exe_out = execute_binary_captured_inject_io(
-            run_dir, cmd, error_dict,
-            log_execution=False, log_stdout=False, log_stderr=False,
-            **env_vars)
-
-    end_time = time.time()
-
-    afire_time = execution_time(start_time, end_time)
-    LOG.debug("afire execution of {} took {:9.6f} seconds".format(granule_id, afire_time['delta']))
-    LOG.info("\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
-        .format(granule_id, afire_time['days'],afire_time['hours'],
-            afire_time['minutes'],afire_time['seconds']))
-
-    LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
-
-    os.chdir(current_dir)
-    LOG.debug("We are in {}".format(os.getcwd()))
-
-    # Write the afire output to a log file, and parse it to determine the output
-    creation_dt = datetime.utcnow()
-    timestamp = creation_dt.isoformat()
-    logname = "{}_{}.log".format(run_dir, timestamp)
-    log_dir = os.path.dirname(run_dir)
-    logpath = os.path.join(log_dir, logname)
-    logfile_obj = open(logpath,'w')
-    for line in exe_out.splitlines():
-        logfile_obj.write(line+"\n")
-    logfile_obj.close()
-
-    # Move the output file from the run_dir to the work_dir
-    old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
-    new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
-    new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
-    LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
-    try:
-        shutil.move(old_output_file, new_output_file)
-    except Exception:
+    # Run the active fire binary
+    if rc_ancil != 0 or lwm_file is None :
+        LOG.warn('Ancillary retrieval failed for granule_id {}'.format(granule_id))
+        os.chdir(current_dir)
         rc_problem = 1
-        LOG.warning("Problem moving output file from {} to {}".format(
-            old_output_file, new_output_file))
-        LOG.debug(traceback.format_exc())
+    else:
+        # Link the required files and directories into the work directory...
+        paths_to_link = [
+            os.path.join(afire_home,'vendor/vfire_static'),
+            lwm_file,
+        ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
+        number_linked = link_files(run_dir, paths_to_link)
+
+        # Contruct a dictionary of error conditions which should be logged.
+        error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
+                      'ERROR', 'error', 'ERR', 'err',
+                      'ABORTING', 'aborting', 'ABORT','abort']
+        error_dict = {x:{'pattern':x, 'count_only':False, 'count':0, 'max_count':None, 'log_str':''}
+                for x in error_keys}
+        error_dict['error_keys'] = error_keys
+
+        start_time = time.time()
+
+        rc_exe, exe_out = execute_binary_captured_inject_io(
+                run_dir, cmd, error_dict,
+                log_execution=False, log_stdout=False, log_stderr=False,
+                **env_vars)
+
+        end_time = time.time()
+
+        afire_time = execution_time(start_time, end_time)
+        LOG.debug("afire execution of {} took {:9.6f} seconds".format(granule_id, afire_time['delta']))
+        LOG.info("\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
+            .format(granule_id, afire_time['days'],afire_time['hours'],
+                afire_time['minutes'],afire_time['seconds']))
+
+        LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
+
+        os.chdir(current_dir)
+
+        # Write the afire output to a log file, and parse it to determine the output
+        creation_dt = datetime.utcnow()
+        timestamp = creation_dt.isoformat()
+        logname = "{}_{}.log".format(run_dir, timestamp)
+        log_dir = os.path.dirname(run_dir)
+        logpath = os.path.join(log_dir, logname)
+        logfile_obj = open(logpath,'w')
+        for line in exe_out.splitlines():
+            logfile_obj.write(line+"\n")
+        logfile_obj.close()
+
+        # Move the output file from the run_dir to the work_dir
+        old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
+        new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
+        new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
+        LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
+        try:
+            shutil.move(old_output_file, new_output_file)
+        except Exception:
+            rc_problem = 1
+            LOG.warning("Problem moving output file from {} to {}".format(
+                old_output_file, new_output_file))
+            LOG.debug(traceback.format_exc())
 
     # If no problems, remove the run dir
     if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
@@ -218,7 +203,7 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
 
     total_afire_time = execution_time(start_time, end_time)
     LOG.debug("afire execution took {:9.6f} seconds".format(total_afire_time['delta']))
-    LOG.info("\tafire execution took {} days, {} hours, {} minutes, {:8.6f} seconds"
+    LOG.info("Active Fire execution took {} days, {} hours, {} minutes, {:8.6f} seconds"
         .format(total_afire_time['days'],total_afire_time['hours'],
             total_afire_time['minutes'],total_afire_time['seconds']))
 

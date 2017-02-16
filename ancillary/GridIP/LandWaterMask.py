@@ -16,7 +16,7 @@ import re
 import uuid
 from glob import glob
 from time import time
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 
 from scipy import round_
 
@@ -31,8 +31,6 @@ import h5py
 from netCDF4 import Dataset, Variable
 from netCDF4 import num2date
 
-import ViirsData
-
 from Utils import getURID, getAscLine, getAscStructs, findDatelineCrossings, shipOutToFile
 from Utils import index, find_lt, find_le, find_gt, find_ge
 from Utils import Datafile_HDF5, Satellite_NetCDF
@@ -44,10 +42,9 @@ class LandWaterMask() :
 
     def __init__(self, granule_dict, afire_options):
         self.collectionShortName = 'VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'
-        self.dataType = 'uint8'
+        self.dataType = 'int8'
         self.sourceType = 'DEM'
         self.sourceList = ['']
-        self.trimObj = ViirsData.ViirsTrimTable()
         self.granule_dict = granule_dict
         self.afire_options = afire_options
 
@@ -71,38 +68,43 @@ class LandWaterMask() :
         '''
         Populate this class instance with the geolocation data for a single granule
         '''
-        # Open the geolocation file and get the latitude and longitude
-        geo_filename = self.granule_dict['GMTCO']['file']
-        geo_file_obj = h5py.File(geo_filename,'r')
 
-        #LOG.info("geolocation datanames = {}".format(geo_file_obj.datanames))
-        #LOG.info("geolocation attrs = {}".format(geo_file_obj.attrs))
-        #LOG.info("geolocation data_dict = {}".format(geo_file_obj.data_dict))
+        try:
+            # Open the geolocation file and get the latitude and longitude
+            geo_filename = self.granule_dict['GMTCO']['file']
+            geo_file_obj = h5py.File(geo_filename,'r')
 
-        # Get scan_mode to find any bad scans
-        scanMode = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/ModeScan'][:]
-        badScanIdx = np.where(scanMode==254)[0]
-        LOG.info("Bad Scans: {}".format(badScanIdx))
+            # Get scan_mode to find any bad scans
+            scanMode = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/ModeScan'][:]
+            badScanIdx = np.where(scanMode==254)[0]
+            if badScanIdx != []:
+                LOG.warning("Geolocation file {} has bad scans: {}".format(geo_filename, badScanIdx))
 
 
-        # Detemine the min, max and range of the latitude and longitude, 
-        # taking care to exclude any fill values.
+            # Detemine the min, max and range of the latitude and longitude, 
+            # taking care to exclude any fill values.
 
-        latitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Latitude'][:]
-        longitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Longitude'][:]
+            latitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Latitude'][:]
+            longitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Longitude'][:]
 
-        latitude = ma.masked_less(latitude,-800.)
-        latMin,latMax = np.min(latitude),np.max(latitude)
-        latRange = latMax-latMin
+            latitude = ma.masked_less(latitude,-800.)
+            latMin,latMax = np.min(latitude),np.max(latitude)
+            latRange = latMax-latMin
 
-        longitude = ma.masked_less(longitude,-800.)
-        lonMin,lonMax = np.min(longitude),np.max(longitude)
-        lonRange = lonMax-lonMin
+            longitude = ma.masked_less(longitude,-800.)
+            lonMin,lonMax = np.min(longitude),np.max(longitude)
+            lonRange = lonMax-lonMin
 
-        LOG.info("min,max,range of latitide: {} {} {}".format(latMin,latMax,latRange))
-        LOG.info("min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
+            LOG.debug("min,max,range of latitide: {} {} {}".format(latMin,latMax,latRange))
+            LOG.debug("min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
 
-        geo_file_obj.close()
+            geo_file_obj.close()
+
+        except Exception, err :
+            LOG.exception(err)
+            LOG.exception("Problem opening geolocation file ({}), aborting.".format(geo_filename))
+            geo_file_obj.close()
+            return 1
 
         # Determine the latitude and longitude fill masks, so we can restore the 
         # fill values after we have scaled...
@@ -111,24 +113,22 @@ class LandWaterMask() :
 
         # Restore fill values to masked pixels in geolocation
 
-        geoFillValue = self.trimObj.sdrTypeFill['VDNE_FLOAT64_FILL'][latitude.dtype.name]
-        latitude = ma.array(latitude,mask=latMask,fill_value=geoFillValue)
+        latitude = ma.array(latitude,mask=latMask,fill_value=-999.)
         self.latitude = latitude.filled()
 
-        geoFillValue = self.trimObj.sdrTypeFill['VDNE_FLOAT64_FILL'][longitude.dtype.name]
-        longitude = ma.array(longitude,mask=lonMask,fill_value=geoFillValue)
+        longitude = ma.array(longitude,mask=lonMask,fill_value=-999.)
         self.longitude = longitude.filled()
 
         # Shift the longitudes to be between -180 and 180 degrees
         if lonMax > 180. :
-            LOG.info("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
+            LOG.debug("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
             dateLineIdx = np.where(longitude>180.)
-            LOG.info("dateLineIdx = {}".format(dateLineIdx))
+            LOG.debug("dateLineIdx = {}".format(dateLineIdx))
             longitude[dateLineIdx] -= 360.
             lonMax = np.max(ma.array(longitude,mask=lonMask))
             lonMin = np.min(ma.array(longitude,mask=lonMask))
             lonRange = lonMax-lonMin
-            LOG.info("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
+            LOG.debug("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
 
         # Record the corners, taking care to exclude any bad scans...
         nDetectors = 16
@@ -142,7 +142,7 @@ class LandWaterMask() :
 
         # Check for dateline/pole crossings
         num180Crossings = findDatelineCrossings(latCrnList,lonCrnList)
-        LOG.info("We have {} dateline crossings.".format(num180Crossings))
+        LOG.debug("We have {} dateline crossings.".format(num180Crossings))
 
         # Copy the geolocation information to the class object
         self.latMin    = latMin
@@ -158,7 +158,7 @@ class LandWaterMask() :
         self.lonCrnList  = lonCrnList
         self.num180Crossings  = num180Crossings
 
-        return
+        return 0
 
 
     def subset(self):
@@ -180,14 +180,14 @@ class LandWaterMask() :
         except Exception, err :
             LOG.exception(err)
             LOG.exception("Problem opening DEM file ({}), aborting.".format(DEM_fileName))
-            #sys.exit(1)
+            return 1
 
         try :
             DEM_gridLats = -1. * (np.arange(21600.) * DEM_dLat - 90.)
             DEM_gridLons = np.arange(43200.) * DEM_dLon - 180.
 
-            LOG.info("min,max DEM Grid Latitude values : {},{}".format(DEM_gridLats[0],DEM_gridLats[-1]))
-            LOG.info("min,max DEM Grid Longitude values : {},{}".format(DEM_gridLons[0],DEM_gridLons[-1]))
+            LOG.debug("min,max DEM Grid Latitude values : {},{}".format(DEM_gridLats[0],DEM_gridLats[-1]))
+            LOG.debug("min,max DEM Grid Longitude values : {},{}".format(DEM_gridLons[0],DEM_gridLons[-1]))
 
             latMin = self.latMin
             latMax = self.latMax
@@ -205,13 +205,10 @@ class LandWaterMask() :
             DEM_lonMinIdx = DEM_lonIdx[0]
             DEM_lonMaxIdx = DEM_lonIdx[-1]
 
-            LOG.info("DEM_latMinIdx = {}".format(DEM_latMinIdx))
-            LOG.info("DEM_latMaxIdx = {}".format(DEM_latMaxIdx))
-            LOG.info("DEM_lonMinIdx = {}".format(DEM_lonMinIdx))
-            LOG.info("DEM_lonMaxIdx = {}".format(DEM_lonMaxIdx))
-
-            #DEMobj.close()
-            #return
+            LOG.debug("DEM_latMinIdx = {}".format(DEM_latMinIdx))
+            LOG.debug("DEM_latMaxIdx = {}".format(DEM_latMaxIdx))
+            LOG.debug("DEM_lonMinIdx = {}".format(DEM_lonMinIdx))
+            LOG.debug("DEM_lonMaxIdx = {}".format(DEM_lonMaxIdx))
 
             lat_subset = DEM_gridLats[DEM_latMinIdx:DEM_latMaxIdx+1]
             self.gridLat = lat_subset
@@ -249,10 +246,13 @@ class LandWaterMask() :
 
         except Exception, err :
 
-            LOG.info("EXCEPTION: {}".format (err))
+            LOG.warning("EXCEPTION: {}".format (err))
 
             del(DEM_node)
             DEMobj.close()
+            return 1
+
+        return 0
 
 
     def _grid2Gran(self, dataLat, dataLon, gridData, gridLat, gridLon):
@@ -267,7 +267,7 @@ class LandWaterMask() :
 
         libFile = path.join(self.afire_options['afire_home'],
                 'lib','libgriddingAndGranulation.so')
-        LOG.info("Gridding and granulation library file: {}".format(libFile))
+        LOG.debug("Gridding and granulation library file: {}".format(libFile))
         lib = ctypes.cdll.LoadLibrary(libFile)
         grid2gran = lib.grid2gran_nearest
         grid2gran.restype = None
@@ -300,7 +300,7 @@ class LandWaterMask() :
 
 
         try:
-            LOG.info("Calling C routine grid2gran()...")
+            LOG.debug("Calling C routine grid2gran()...")
             retVal = grid2gran(dataLat.astype('float64'),
                                dataLon.astype('float64'),
                                data,
@@ -311,10 +311,10 @@ class LandWaterMask() :
                                dataIdx,
                                gridRows,
                                gridCols)
-            LOG.info("Returning from C routine grid2gran()")
+            LOG.debug("Returning from C routine grid2gran()")
         except Exception, err :
-            LOG.info("There was a problem running C routine grid2gran()")
-            LOG.info("EXCEPTION: {}".format (err))
+            LOG.debug("There was a problem running C routine grid2gran()")
+            LOG.warning("EXCEPTION: {}".format (err))
 
         return data,dataIdx
 
@@ -339,30 +339,41 @@ class LandWaterMask() :
             longitudeNegIdx = np.where(longitude < 0.)
             longitude[longitudeNegIdx] += 360.
 
-        LOG.info("Granulating {} ..." .format(self.collectionShortName))
-        LOG.info("latitide,longitude shapes: {}, {}".format(str(latitude.shape) , str(longitude.shape)))
-        LOG.info("gridData.shape = {}".format(str(gridData.shape)))
-        LOG.info("gridLat.shape = {}".format(str(gridLat.shape)))
-        LOG.info("gridLon.shape = {}".format(str(gridLon.shape)))
+        LOG.debug("Granulating {} ..." .format(self.collectionShortName))
+        LOG.debug("latitide,longitude shapes: {}, {}".format(str(latitude.shape) , str(longitude.shape)))
+        LOG.debug("gridData.shape = {}".format(str(gridData.shape)))
+        LOG.debug("gridLat.shape = {}".format(str(gridLat.shape)))
+        LOG.debug("gridLon.shape = {}".format(str(gridLon.shape)))
 
-        LOG.info("min of gridData  = {}".format(np.min(gridData)))
-        LOG.info("max of gridData  = {}".format(np.max(gridData)))
+        LOG.debug("min of gridData  = {}".format(np.min(gridData)))
+        LOG.debug("max of gridData  = {}".format(np.max(gridData)))
 
         t1 = time()
-        data,dataIdx = self._grid2Gran(np.ravel(latitude),
-                                  np.ravel(longitude),
-                                  gridData.astype(np.float64),
-                                  gridLat.astype(np.float64),
-                                  gridLon.astype(np.float64))
+
+        try:
+            data,dataIdx = self._grid2Gran(np.ravel(latitude),
+                                      np.ravel(longitude),
+                                      gridData.astype(np.float64),
+                                      gridLat.astype(np.float64),
+                                      gridLon.astype(np.float64))
+        except Exception, err :
+            LOG.debug("There was a problem running  _grid2gran()")
+            LOG.warning("EXCEPTION: {}".format (err))
+            return 1
+
         t2 = time()
         elapsedTime = t2-t1
-        LOG.info("Granulation took {} seconds for {} points".format(elapsedTime,latitude.size))
+        LOG.debug("Granulation of {} took {} seconds for {} points".format(
+            self.granule_dict['granule_id'], elapsedTime, latitude.size))
 
         data = data.reshape(latitude.shape)
         dataIdx = dataIdx.reshape(latitude.shape)
 
+        LOG.debug("Shape of granulated {} data is {}".format(self.collectionShortName,np.shape(data)))
+        LOG.debug("Shape of granulated {} dataIdx is {}".format(self.collectionShortName,np.shape(dataIdx)))
+
         # Convert granulated data back to original type...
-        data = data.astype(self.dataType)
+        self.data = data.astype(self.dataType)
 
         # Convert any "inland water" to "sea water"
         #shallowInlandWaterValue = self.DEM_dict['DEM_SHALLOW_INLAND_WATER']
@@ -379,28 +390,7 @@ class LandWaterMask() :
         #data = ma.array(data,mask=totalWaterMask,fill_value=deepOceanValue)
         #data = data.filled()
 
-
-        LOG.info("Shape of granulated {} data is {}".format(self.collectionShortName,np.shape(data)))
-        LOG.info("Shape of granulated {} dataIdx is {}".format(self.collectionShortName,np.shape(dataIdx)))
-
-        # Explicitly restore geolocation fill to the granulated data...
-        fillMask = ma.masked_less(self.latitude,-800.).mask
-        fillValue = self.trimObj.sdrTypeFill['MISS_FILL'][self.dataType]        
-        data = ma.array(data,mask=fillMask,fill_value=fillValue)
-        self.data = data.filled()
-
-        # Moderate resolution trim table arrays. These are 
-        # bool arrays, and the trim pixels are set to True.
-        #modTrimMask = self.trimObj.createModTrimArray(nscans=48,trimType=bool)
-
-        # Fill the required pixel trim rows in the granulated GridIP data with 
-        # the ONBOARD_PT_FILL value for the correct data type
-
-        #fillValue = self.trimObj.sdrTypeFill['ONBOARD_PT_FILL'][self.dataType]        
-        #data = ma.array(data,mask=modTrimMask,fill_value=fillValue)
-        #self.data = data.filled()
-
-        LOG.info("self.data = {}".format(self.data))
+        return 0
 
     def shipOutToFile(self, lwm_file):
         '''
@@ -408,28 +398,43 @@ class LandWaterMask() :
         a blob/asc file pair from the input ancillary data object.
         '''
 
-        ## Write the new data to the LWM template file
-        # This should go in LandWaterMask.shipOutToFile()
-        LOG.info("Opening LWM file {} for writing".format(lwm_file))
+        # Get the geolocation fill values...
+        geo_mask = ma.masked_less(self.latitude,-800.).mask
+
+        # Get the granule time
+        granule_dt = self.granule_dict['GMTCO']['dt']
+
+        # Write the new data to the LWM template file
+        LOG.debug("Opening LWM file {} for writing".format(lwm_file))
         file_obj = Dataset(lwm_file,"a", format="NETCDF4")
         try:
             # Get the latitude
-            latitude_obj = file_obj['Latitude'] 
-            latitude_obj[:] = self.latitude[:]
+            latitude_obj = file_obj['Latitude']
+            latitude_obj[:] = self.latitude[:].astype('float32')
 
             # Get the longitude
             longitude_obj = file_obj['Longitude'] 
-            longitude_obj[:] = self.longitude[:]
+            longitude_obj[:] = self.longitude[:].astype('float32')
             
             # Get the Land Water Mask
-            lwm_obj = file_obj['LandMask'] 
-            lwm_obj[:] = self.data[:]
+            lwm_obj = file_obj['LandMask']
+            lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask, fill_value=-128).filled()
 
+            # Set some global attributes
+            setattr(file_obj,'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))
+            setattr(file_obj,'Image_Date', granule_dt.strftime("%Y%j"))
+            setattr(file_obj,'Image_Time', granule_dt.strftime("%H%M%S"))
+            setattr(file_obj,'Source', 'dem30ARC, CSPP Active Fires v1.0')
+
+            # Close the file
             file_obj.close()
 
         except Exception, err :
-            LOG.info("Writing to LWM file {} failed".format(lwm_file))
-            LOG.info("EXCEPTION: {}".format (err))
+            LOG.error("Writing to LWM file {} failed".format(lwm_file))
+            LOG.debug("EXCEPTION: {}".format (err))
+            return 1
+
+        return 0
 
         #shipOutToFile(self)
         #pass
