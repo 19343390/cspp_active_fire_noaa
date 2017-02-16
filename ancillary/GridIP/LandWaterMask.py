@@ -22,60 +22,34 @@ from scipy import round_
 
 import numpy as np
 from numpy import ma
-import copy
 from bisect import bisect_left,bisect_right
 
 import ctypes
 from numpy.ctypeslib import ndpointer
 
-import tables as pytables
-from tables import exceptions as pyEx
+import h5py
+from netCDF4 import Dataset, Variable
+from netCDF4 import num2date
 
 import ViirsData
 
-# skim and convert routines for reading .asc metadata fields of interest
-#import adl_blob2 as adl_blob
-#import adl_asc
-#from adl_asc import skim_dir, contiguous_granule_groups, granule_groups_contain, effective_anc_contains,eliminate_duplicates,_is_contiguous, RDR_REQUIRED_KEYS, POLARWANDER_REQUIRED_KEYS
-#from adl_common import ADL_HOME, CSPP_RT_HOME, CSPP_RT_ANC_HOME
-
-# every module should have a LOG object
-try :
-    sourcename= file_Id.split(" ")
-    LOG = logging.getLogger(sourcename[1])
-except :
-    LOG = logging.getLogger('LandWaterMask')
-
 from Utils import getURID, getAscLine, getAscStructs, findDatelineCrossings, shipOutToFile
 from Utils import index, find_lt, find_le, find_gt, find_ge
+from Utils import Datafile_HDF5, Satellite_NetCDF
 from Utils import plotArr
 
+LOG = logging.getLogger('LandWaterMask')
 
 class LandWaterMask() :
 
-    def __init__(self,inDir=None, sdrEndian=None, ancEndian=None):
+    def __init__(self, granule_dict, afire_options):
         self.collectionShortName = 'VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'
-        self.xmlName = 'VIIRS_GRIDIP_VIIRS_LWM_MOD_GRAN.xml'
-        self.blobDatasetName = 'landWaterMask'
         self.dataType = 'uint8'
         self.sourceType = 'DEM'
         self.sourceList = ['']
         self.trimObj = ViirsData.ViirsTrimTable()
-
-        if inDir is None :
-            self.inDir = path.abspath(path.curdir)
-        else :
-            self.inDir = inDir
-
-        if sdrEndian is None :
-            self.sdrEndian = adl_blob.LITTLE_ENDIAN
-        else :
-            self.sdrEndian = sdrEndian
-
-        if ancEndian is None :
-            self.ancEndian = adl_blob.LITTLE_ENDIAN
-        else :
-            self.ancEndian = ancEndian
+        self.granule_dict = granule_dict
+        self.afire_options = afire_options
 
         # Digital Elevation Model (DEM) land sea mask types
         self.DEM_list = ['DEM_SHALLOW_OCEAN','DEM_LAND','DEM_COASTLINE',
@@ -93,81 +67,29 @@ class LandWaterMask() :
         }
 
 
-    def setGeolocationInfo(self,dicts):
+    def setGeolocationInfo(self):
         '''
         Populate this class instance with the geolocation data for a single granule
         '''
-        # Set some environment variables and paths
-        ANC_SCRIPTS_PATH = path.join(CSPP_RT_HOME,'viirs')
-        ADL_ASC_TEMPLATES = path.join(ANC_SCRIPTS_PATH,'asc_templates')
+        # Open the geolocation file and get the latitude and longitude
+        geo_filename = self.granule_dict['GMTCO']['file']
+        geo_file_obj = h5py.File(geo_filename,'r')
 
-        # Collect some data from the geolocation dictionary
-        self.geoDict = dicts
-        URID = dicts['URID']
-        geo_Collection_ShortName = dicts['N_Collection_Short_Name']
-        N_Granule_ID = dicts['N_Granule_ID']
-        ObservedStartTimeObj = dicts['ObservedStartTime']
-        geoFiles = glob('%s/%s*' % (self.inDir,URID))
-        geoFiles.sort()
-
-        LOG.debug("###########################")
-        LOG.debug("  Geolocation Information  ")
-        LOG.debug("###########################")
-        LOG.debug("N_Granule_ID : %r" % (N_Granule_ID))
-        LOG.debug("ObservedStartTime : %s" % (ObservedStartTimeObj.__str__()))
-        LOG.debug("N_Collection_Short_Name : %s" %(geo_Collection_ShortName))
-        LOG.debug("URID : %r" % (URID))
-        LOG.debug("geoFiles : %r" % (geoFiles))
-        LOG.debug("###########################")
-
-        # Do we have terrain corrected geolocation?
-        terrainCorrectedGeo = True if 'GEO-TC' in geo_Collection_ShortName else False
-
-        # Do we have long or short style geolocation field names?
-        if (geo_Collection_ShortName=='VIIRS-MOD-GEO-TC' or geo_Collection_ShortName=='VIIRS-MOD-RGEO') :
-            longFormGeoNames = True
-            LOG.debug("We have long form geolocation names")
-        elif (geo_Collection_ShortName=='VIIRS-MOD-GEO' or geo_Collection_ShortName=='VIIRS-MOD-RGEO-TC') :
-            LOG.debug("We have short form geolocation names")
-            longFormGeoNames = False
-        else :
-            LOG.error("Invalid geolocation shortname: %s" %(geo_Collection_ShortName))
-            return -1
-
-        # Get the geolocation xml file
-
-        geoXmlFile = "%s.xml" % (string.replace(geo_Collection_ShortName,'-','_'))
-        geoXmlFile = path.join(ADL_HOME,'xml/VIIRS',geoXmlFile)
-        if path.exists(geoXmlFile):
-            LOG.debug("We are using for %s: %s,%s" %(geo_Collection_ShortName,geoXmlFile,geoFiles[0]))
-
-        # Open the geolocation blob and get the latitude and longitude
-
-        endian = self.sdrEndian
-
-        geoBlobObj = adl_blob.map(geoXmlFile,geoFiles[0], endian=endian)
+        #LOG.info("geolocation datanames = {}".format(geo_file_obj.datanames))
+        #LOG.info("geolocation attrs = {}".format(geo_file_obj.attrs))
+        #LOG.info("geolocation data_dict = {}".format(geo_file_obj.data_dict))
 
         # Get scan_mode to find any bad scans
-
-        scanMode = geoBlobObj.scan_mode[:]
+        scanMode = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/ModeScan'][:]
         badScanIdx = np.where(scanMode==254)[0]
-        LOG.debug("Bad Scans: %r" % (badScanIdx))
+        LOG.info("Bad Scans: {}".format(badScanIdx))
+
 
         # Detemine the min, max and range of the latitude and longitude, 
         # taking care to exclude any fill values.
 
-        if longFormGeoNames :
-            if endian==adl_blob.BIG_ENDIAN:
-                latitude = getattr(geoBlobObj,'latitude').byteswap()
-                longitude = getattr(geoBlobObj,'longitude').byteswap()
-                latitude = latitude.astype('float')
-                longitude = longitude.astype('float')
-            else:
-                latitude = getattr(geoBlobObj,'latitude').astype('float')
-                longitude = getattr(geoBlobObj,'longitude').astype('float')
-        else :
-            latitude = getattr(geoBlobObj,'lat').astype('float')
-            longitude = getattr(geoBlobObj,'lon').astype('float')
+        latitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Latitude'][:]
+        longitude = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/Longitude'][:]
 
         latitude = ma.masked_less(latitude,-800.)
         latMin,latMax = np.min(latitude),np.max(latitude)
@@ -177,28 +99,15 @@ class LandWaterMask() :
         lonMin,lonMax = np.min(longitude),np.max(longitude)
         lonRange = lonMax-lonMin
 
-        LOG.debug("min,max,range of latitide: %f %f %f" % (latMin,latMax,latRange))
-        LOG.debug("min,max,range of longitude: %f %f %f" % (lonMin,lonMax,lonRange))
+        LOG.info("min,max,range of latitide: {} {} {}".format(latMin,latMax,latRange))
+        LOG.info("min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
+
+        geo_file_obj.close()
 
         # Determine the latitude and longitude fill masks, so we can restore the 
         # fill values after we have scaled...
-
         latMask = latitude.mask
         lonMask = longitude.mask
-
-        # Check if the geolocation is in radians, convert to degrees
-        if 'RGEO' in geo_Collection_ShortName :
-            LOG.debug("Geolocation is in radians, convert to degrees...")
-            latitude = np.degrees(latitude)
-            longitude = np.degrees(longitude)
-        
-            latMin,latMax = np.min(latitude),np.max(latitude)
-            latRange = latMax-latMin
-            lonMin,lonMax = np.min(longitude),np.max(longitude)
-            lonRange = lonMax-lonMin
-
-            LOG.debug("New min,max,range of latitude: %f %f %f" % (latMin,latMax,latRange))
-            LOG.debug("New min,max,range of longitude: %f %f %f" % (lonMin,lonMax,lonRange))
 
         # Restore fill values to masked pixels in geolocation
 
@@ -212,14 +121,14 @@ class LandWaterMask() :
 
         # Shift the longitudes to be between -180 and 180 degrees
         if lonMax > 180. :
-            LOG.debug("\nFinal min,max,range of longitude: %f %f %f" % (lonMin,lonMax,lonRange))
+            LOG.info("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
             dateLineIdx = np.where(longitude>180.)
-            LOG.debug("dateLineIdx = %r" % (dateLineIdx))
+            LOG.info("dateLineIdx = {}".format(dateLineIdx))
             longitude[dateLineIdx] -= 360.
             lonMax = np.max(ma.array(longitude,mask=lonMask))
             lonMin = np.min(ma.array(longitude,mask=lonMask))
             lonRange = lonMax-lonMin
-            LOG.debug("\nFinal min,max,range of longitude: %f %f %f" % (lonMin,lonMax,lonRange))
+            LOG.info("\nFinal min,max,range of longitude: {} {} {}".format(lonMin,lonMax,lonRange))
 
         # Record the corners, taking care to exclude any bad scans...
         nDetectors = 16
@@ -233,7 +142,7 @@ class LandWaterMask() :
 
         # Check for dateline/pole crossings
         num180Crossings = findDatelineCrossings(latCrnList,lonCrnList)
-        LOG.debug("We have %d dateline crossings."%(num180Crossings))
+        LOG.info("We have {} dateline crossings.".format(num180Crossings))
 
         # Copy the geolocation information to the class object
         self.latMin    = latMin
@@ -249,27 +158,7 @@ class LandWaterMask() :
         self.lonCrnList  = lonCrnList
         self.num180Crossings  = num180Crossings
 
-        # Parse the geolocation asc file to get struct information which will be 
-        # written to the ancillary asc files
-
-        geoAscFileName = path.join(self.inDir,URID+".asc")
-        LOG.debug("\nOpening %s..." % (geoAscFileName))
-
-        geoAscFile = open(geoAscFileName,'rt')
-
-        self.ObservedDateTimeStr =  getAscLine(geoAscFile,"ObservedDateTime")
-        #self.RangeDateTimeStr =  self.ObservedDateTimeStr
-        self.RangeDateTimeStr =  getAscLine(geoAscFile,"ObservedDateTime")
-        self.RangeDateTimeStr =  string.replace(self.RangeDateTimeStr,"ObservedDateTime","RangeDateTime")
-        self.GRingLatitudeStr =  getAscStructs(geoAscFile,"GRingLatitude",12)
-        self.GRingLongitudeStr = getAscStructs(geoAscFile,"GRingLongitude",12)
-
-        self.North_Bounding_Coordinate_Str = getAscLine(geoAscFile,"North_Bounding_Coordinate")
-        self.South_Bounding_Coordinate_Str = getAscLine(geoAscFile,"South_Bounding_Coordinate")
-        self.East_Bounding_Coordinate_Str  = getAscLine(geoAscFile,"East_Bounding_Coordinate")
-        self.West_Bounding_Coordinate_Str  = getAscLine(geoAscFile,"West_Bounding_Coordinate")
-
-        geoAscFile.close()
+        return
 
 
     def subset(self):
@@ -280,24 +169,25 @@ class LandWaterMask() :
         DEM_dLat = 30.*(1./3600.)
         DEM_dLon = 30.*(1./3600.)
 
-        DEM_fileName = path.join(CSPP_RT_ANC_HOME,'LSM/dem30ARC_Global_LandWater_uncompressed.h5')
+        DEM_fileName = path.join(self.afire_options['ancil_dir'],
+                'dem30ARC_Global_LandWater_compressed.h5')
         self.sourceList.append(path.basename(DEM_fileName))
 
         try :
             # TODO : Use original HDF4 file which contains elevation and LWM.
-            DEMobj = pytables.openFile(DEM_fileName,'r')
-            DEM_node = DEMobj.getNode('/demGRID/Data Fields/LandWater')
+            DEMobj = h5py.File(DEM_fileName,'r')
+            DEM_node = DEMobj['/demGRID/Data Fields/LandWater']
         except Exception, err :
-            LOG.exception("%s"%(err))
-            LOG.exception("Problem opening DEM file (%s), aborting."%(DEM_fileName))
-            sys.exit(1)
+            LOG.exception(err)
+            LOG.exception("Problem opening DEM file ({}), aborting.".format(DEM_fileName))
+            #sys.exit(1)
 
         try :
             DEM_gridLats = -1. * (np.arange(21600.) * DEM_dLat - 90.)
             DEM_gridLons = np.arange(43200.) * DEM_dLon - 180.
 
-            LOG.debug("min,max DEM Grid Latitude values : %f,%f"%(DEM_gridLats[0],DEM_gridLats[-1]))
-            LOG.debug("min,max DEM Grid Longitude values : %f,%f"%(DEM_gridLons[0],DEM_gridLons[-1]))
+            LOG.info("min,max DEM Grid Latitude values : {},{}".format(DEM_gridLats[0],DEM_gridLats[-1]))
+            LOG.info("min,max DEM Grid Longitude values : {},{}".format(DEM_gridLons[0],DEM_gridLons[-1]))
 
             latMin = self.latMin
             latMax = self.latMax
@@ -315,10 +205,13 @@ class LandWaterMask() :
             DEM_lonMinIdx = DEM_lonIdx[0]
             DEM_lonMaxIdx = DEM_lonIdx[-1]
 
-            LOG.debug("DEM_latMinIdx = %d" % (DEM_latMinIdx))
-            LOG.debug("DEM_latMaxIdx = %d" % (DEM_latMaxIdx))
-            LOG.debug("DEM_lonMinIdx = %d" % (DEM_lonMinIdx))
-            LOG.debug("DEM_lonMaxIdx = %d" % (DEM_lonMaxIdx))
+            LOG.info("DEM_latMinIdx = {}".format(DEM_latMinIdx))
+            LOG.info("DEM_latMaxIdx = {}".format(DEM_latMaxIdx))
+            LOG.info("DEM_lonMinIdx = {}".format(DEM_lonMinIdx))
+            LOG.info("DEM_lonMaxIdx = {}".format(DEM_lonMaxIdx))
+
+            #DEMobj.close()
+            #return
 
             lat_subset = DEM_gridLats[DEM_latMinIdx:DEM_latMaxIdx+1]
             self.gridLat = lat_subset
@@ -351,14 +244,14 @@ class LandWaterMask() :
             # Copy DEM data to the GridIP object
             self.gridData = DEM_subset.astype(self.dataType)
 
-            DEM_node.close()
+            del(DEM_node)
             DEMobj.close()
 
         except Exception, err :
 
-            LOG.debug("EXCEPTION: %s" % (err))
+            LOG.info("EXCEPTION: {}".format (err))
 
-            DEM_node.close()
+            del(DEM_node)
             DEMobj.close()
 
 
@@ -369,13 +262,12 @@ class LandWaterMask() :
         gridRows = np.int32(gridLat.shape[0])
         gridCols = np.int32(gridLat.shape[1])
 
-        data = np.ones(np.shape(dataLat),dtype=np.float64)* -999.9
-        dataIdx  = np.ones(np.shape(dataLat),dtype=np.int64) * -99999
+        data = np.ones(np.shape(dataLat),dtype=np.float64) * 254.
+        dataIdx  = np.ones(np.shape(dataLat),dtype=np.int64) * -254
 
-        ANC_SCRIPTS_PATH = path.join(CSPP_RT_HOME,'viirs')
-
-        libFile = path.join(ANC_SCRIPTS_PATH,'libgriddingAndGranulation.so.1.0.1')
-        LOG.debug("Gridding and granulation library file: %s" % (libFile))
+        libFile = path.join(self.afire_options['afire_home'],
+                'lib','libgriddingAndGranulation.so')
+        LOG.info("Gridding and granulation library file: {}".format(libFile))
         lib = ctypes.cdll.LoadLibrary(libFile)
         grid2gran = lib.grid2gran_nearest
         grid2gran.restype = None
@@ -406,26 +298,28 @@ class LandWaterMask() :
                         )
         '''
 
-        LOG.debug("Calling C routine grid2gran()...")
 
-        retVal = grid2gran(dataLat,
-                           dataLon,
-                           data,
-                           nData,
-                           gridLat,
-                           gridLon,
-                           gridData,
-                           dataIdx,
-                           gridRows,
-                           gridCols)
-
-        LOG.debug("Returning from C routine grid2gran()")
-
+        try:
+            LOG.info("Calling C routine grid2gran()...")
+            retVal = grid2gran(dataLat.astype('float64'),
+                               dataLon.astype('float64'),
+                               data,
+                               nData,
+                               gridLat,
+                               gridLon,
+                               gridData,
+                               dataIdx,
+                               gridRows,
+                               gridCols)
+            LOG.info("Returning from C routine grid2gran()")
+        except Exception, err :
+            LOG.info("There was a problem running C routine grid2gran()")
+            LOG.info("EXCEPTION: {}".format (err))
 
         return data,dataIdx
 
 
-    def granulate(self,GridIP_objects):
+    def granulate(self):
         '''
         Granulates the GridIP DEM files.
         '''
@@ -445,14 +339,14 @@ class LandWaterMask() :
             longitudeNegIdx = np.where(longitude < 0.)
             longitude[longitudeNegIdx] += 360.
 
-        LOG.info("Granulating %s ..." % (self.collectionShortName))
-        LOG.debug("latitide,longitude shapes: %s, %s"%(str(latitude.shape) , str(longitude.shape)))
-        LOG.debug("gridData.shape = %s" % (str(gridData.shape)))
-        LOG.debug("gridLat.shape = %s" % (str(gridLat.shape)))
-        LOG.debug("gridLon.shape = %s" % (str(gridLon.shape)))
+        LOG.info("Granulating {} ..." .format(self.collectionShortName))
+        LOG.info("latitide,longitude shapes: {}, {}".format(str(latitude.shape) , str(longitude.shape)))
+        LOG.info("gridData.shape = {}".format(str(gridData.shape)))
+        LOG.info("gridLat.shape = {}".format(str(gridLat.shape)))
+        LOG.info("gridLon.shape = {}".format(str(gridLon.shape)))
 
-        LOG.debug("min of gridData  = %r"%(np.min(gridData)))
-        LOG.debug("max of gridData  = %r"%(np.max(gridData)))
+        LOG.info("min of gridData  = {}".format(np.min(gridData)))
+        LOG.info("max of gridData  = {}".format(np.max(gridData)))
 
         t1 = time()
         data,dataIdx = self._grid2Gran(np.ravel(latitude),
@@ -462,7 +356,7 @@ class LandWaterMask() :
                                   gridLon.astype(np.float64))
         t2 = time()
         elapsedTime = t2-t1
-        LOG.info("Granulation took %f seconds for %d points" % (elapsedTime,latitude.size))
+        LOG.info("Granulation took {} seconds for {} points".format(elapsedTime,latitude.size))
 
         data = data.reshape(latitude.shape)
         dataIdx = dataIdx.reshape(latitude.shape)
@@ -471,23 +365,23 @@ class LandWaterMask() :
         data = data.astype(self.dataType)
 
         # Convert any "inland water" to "sea water"
-        shallowInlandWaterValue = self.DEM_dict['DEM_SHALLOW_INLAND_WATER']
-        shallowOceanValue = self.DEM_dict['DEM_SHALLOW_OCEAN']
-        deepInlandWaterValue = self.DEM_dict['DEM_DEEP_INLAND_WATER']
-        deepOceanValue = self.DEM_dict['DEM_DEEP_OCEAN']
+        #shallowInlandWaterValue = self.DEM_dict['DEM_SHALLOW_INLAND_WATER']
+        #shallowOceanValue = self.DEM_dict['DEM_SHALLOW_OCEAN']
+        #deepInlandWaterValue = self.DEM_dict['DEM_DEEP_INLAND_WATER']
+        #deepOceanValue = self.DEM_dict['DEM_DEEP_OCEAN']
 
-        shallowInlandWaterMask = ma.masked_equal(data,shallowInlandWaterValue).mask
-        shallowOceanMask = ma.masked_equal(data,shallowOceanValue).mask
-        deepInlandWaterMask = ma.masked_equal(data,deepInlandWaterValue).mask
+        #shallowInlandWaterMask = ma.masked_equal(data,shallowInlandWaterValue).mask
+        #shallowOceanMask = ma.masked_equal(data,shallowOceanValue).mask
+        #deepInlandWaterMask = ma.masked_equal(data,deepInlandWaterValue).mask
         
-        totalWaterMask = shallowInlandWaterMask #+ shallowOceanMask + deepInlandWaterMask
+        #totalWaterMask = shallowInlandWaterMask #+ shallowOceanMask + deepInlandWaterMask
 
-        data = ma.array(data,mask=totalWaterMask,fill_value=deepOceanValue)
-        data = data.filled()
+        #data = ma.array(data,mask=totalWaterMask,fill_value=deepOceanValue)
+        #data = data.filled()
 
 
-        LOG.debug("Shape of granulated %s data is %s" % (self.collectionShortName,np.shape(data)))
-        LOG.debug("Shape of granulated %s dataIdx is %s" % (self.collectionShortName,np.shape(dataIdx)))
+        LOG.info("Shape of granulated {} data is {}".format(self.collectionShortName,np.shape(data)))
+        LOG.info("Shape of granulated {} dataIdx is {}".format(self.collectionShortName,np.shape(dataIdx)))
 
         # Explicitly restore geolocation fill to the granulated data...
         fillMask = ma.masked_less(self.latitude,-800.).mask
@@ -506,10 +400,36 @@ class LandWaterMask() :
         #data = ma.array(data,mask=modTrimMask,fill_value=fillValue)
         #self.data = data.filled()
 
+        LOG.info("self.data = {}".format(self.data))
 
-    def shipOutToFile(self):
-        ''' Pass the current class instance to this Utils method to generate 
-            a blob/asc file pair from the input ancillary data object.'''
+    def shipOutToFile(self, lwm_file):
+        '''
+        Pass the current class instance to this Utils method to generate 
+        a blob/asc file pair from the input ancillary data object.
+        '''
+
+        ## Write the new data to the LWM template file
+        # This should go in LandWaterMask.shipOutToFile()
+        LOG.info("Opening LWM file {} for writing".format(lwm_file))
+        file_obj = Dataset(lwm_file,"a", format="NETCDF4")
+        try:
+            # Get the latitude
+            latitude_obj = file_obj['Latitude'] 
+            latitude_obj[:] = self.latitude[:]
+
+            # Get the longitude
+            longitude_obj = file_obj['Longitude'] 
+            longitude_obj[:] = self.longitude[:]
+            
+            # Get the Land Water Mask
+            lwm_obj = file_obj['LandMask'] 
+            lwm_obj[:] = self.data[:]
+
+            file_obj.close()
+
+        except Exception, err :
+            LOG.info("Writing to LWM file {} failed".format(lwm_file))
+            LOG.info("EXCEPTION: {}".format (err))
 
         #shipOutToFile(self)
-        pass
+        #pass

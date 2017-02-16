@@ -53,7 +53,7 @@ def afire_submitter(args):
 
     rc_exe = 0
     rc_problem = 0
-    exe_out = "Finished the Active Fires"
+    exe_out = "Finished the Active Fires granule {}".format(granule_id)
 
     LOG.debug("granule_id = {}".format(granule_id))
     LOG.debug("run_dir = {}".format(run_dir))
@@ -80,6 +80,8 @@ def afire_submitter(args):
     os.chdir(run_dir)
     LOG.debug("We are in {}".format(os.getcwd()))
 
+    '''>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'''
+
     # Download and stage the required ancillary data for this input file
     LOG.info("Staging the required ancillary data...")
     rc_ancil, anc_dir = get_lwm(afire_options, granule_dict)
@@ -93,12 +95,16 @@ def afire_submitter(args):
     #for key in granule_dict.keys():
         #LOG.info("{} : {} = {}".format(granule_id, key, granule_dict[key]))
 
+    '''>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'''
+
     # Link the required files and directories into the work directory...
     paths_to_link = [
         os.path.join(afire_home,'vendor/vfire_static'),
         lwm_file,
     ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
     number_linked = link_files(run_dir, paths_to_link)
+
+    #return [granule_id, rc_exe, rc_problem, exe_out] ### Dummy!
 
     # Contruct a dictionary of error conditions which should be logged.
     error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
@@ -161,37 +167,13 @@ def afire_submitter(args):
 
 def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     """
-    Run active fires to create the level 2 products
+    Dispatch one or more Active Fires jobs to the multiprocessing pool, and report back the final 
+    job statuses.
     """
 
+    # Construct a list of task dicts...
     granule_id_list = afire_data_dict.keys()
     granule_id_list.sort()
-
-    '''
-    To deliberately throw a segfault for testing, we can set...
-
-        cmd = 'echo "This is a test cmd to throw a segfault..." ; kill -11 $$'
-
-    or compile a custom C exe...
-
-        echo "int main() { *((char *)0) = 0; }" > segfault_get.c
-        gcc segfault_get.c -o segfault_get
-
-    and then set...
-
-        cmd = '/mnt/WORK/work_dir/test_data/sample_data/segfault_get'
-
-    which should generate a return code of -11 (segfault).
-    '''
-
-    # A couple of commands which fail to produce output...
-    #sat_obj.cmd['seg_2'] = 'sleep 0.5'
-    #sat_obj.cmd['seg_2'] = 'sleep 0.5; exit 1'
-    #sat_obj.cmd = {x:'sleep 0.5; exit 1' for x in sat_obj.segment_data['segment_keys']}
-    #sat_obj.cmd['seg_2'] = '/mnt/WORK/work_dir/segfault_test/segfault_get'
-    #sat_obj.cmd = {x:'sleep 0.5; echo "geocat>> Cannot create HDF writing for SDS, cloud_spherical_albedo - aborting."' for x in sat_obj.segment_data['segment_keys']}
-
-    # Construct a list of task dicts...
     afire_tasks = []
     for granule_id in granule_id_list:
         args = {'granule_dict':afire_data_dict[granule_id],
@@ -204,19 +186,24 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     LOG.info('There are {} available CPUs'.format(cpu_count))
     
     requested_cpu_count = afire_options['num_cpu']
-    LOG.info('We have requested {} CPUs'.format(requested_cpu_count))
-    
-    if requested_cpu_count > cpu_count:
-        LOG.warn('{} requested CPUs is created than available, using {}'.format(
-            requested_cpu_count,cpu_count))
-        cpus_to_use = cpu_count
+
+    if requested_cpu_count is not None:
+        LOG.info('We have requested {} {}'.format(requested_cpu_count,
+            "CPU" if len(requested_cpu_count) == 1 else "CPUs"))
+
+        if requested_cpu_count > cpu_count:
+            LOG.warn('{} requested CPUs is greater than available, using {}'.format(
+                requested_cpu_count,cpu_count))
+            cpus_to_use = cpu_count
+        else:
+            cpus_to_use = requested_cpu_count
     else:
-        cpus_to_use = requested_cpu_count
+        cpus_to_use = cpu_count
     
     LOG.info('We are using {}/{} available CPUs'.format(cpus_to_use,cpu_count))
-
     pool = multiprocessing.Pool(cpus_to_use)
 
+    # Submit the Active Fire tasks to the processing pool
     timeout = 9999999
     result_list = []
 
@@ -238,7 +225,7 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     rc_exe_dict = {}
     rc_problem_dict = {}
 
-    # Loop through each of the afire results and convert the hdf files to netcdf
+    # Loop through each of the Active Fire results and convert the hdf files to netcdf
     for result in result_list:
         granule_id, afire_rc, problem_rc, exe_out = result
         LOG.debug(">>> granule_id {}: afire_rc = {}, problem_rc = {}".format(
@@ -252,3 +239,31 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     LOG.debug("rc_exe_dict:     {}".format(rc_exe_dict))
 
     return rc_exe_dict, rc_problem_dict
+
+
+# Some information about simulating an exe segfault.
+'''
+To deliberately throw a segfault for testing, we can set...
+
+    cmd = 'echo "This is a test cmd to throw a segfault..." ; kill -11 $$'
+
+or compile a custom C exe...
+
+    echo "int main() { *((char *)0) = 0; }" > segfault_get.c
+    gcc segfault_get.c -o segfault_get
+
+and then set...
+
+    cmd = '/mnt/WORK/work_dir/test_data/sample_data/segfault_get'
+
+which should generate a return code of -11 (segfault).
+'''
+
+# A couple of commands which fail to produce output...
+#sat_obj.cmd['seg_2'] = 'sleep 0.5'
+#sat_obj.cmd['seg_2'] = 'sleep 0.5; exit 1'
+#sat_obj.cmd = {x:'sleep 0.5; exit 1' for x in sat_obj.segment_data['segment_keys']}
+#sat_obj.cmd['seg_2'] = '/mnt/WORK/work_dir/segfault_test/segfault_get'
+#sat_obj.cmd = {x:'sleep 0.5; 
+#    echo "geocat>> Cannot create HDF writing for SDS, cloud_spherical_albedo - aborting."' 
+#    for x in sat_obj.segment_data['segment_keys']}

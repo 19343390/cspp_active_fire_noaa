@@ -22,10 +22,17 @@ import traceback
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime
 
+#import netCDF4
+from netCDF4 import Dataset, Variable
+from netCDF4 import num2date
+
 import log_common
 from utils import link_files, create_dir, execution_time, execute_binary_captured_inject_io
 
+import GridIP
+
 LOG = logging.getLogger('stage_ancillary')
+
 
 def get_lwm(afire_options, granule_dict):
 
@@ -46,82 +53,20 @@ def get_lwm(afire_options, granule_dict):
 
     shutil.copyfile(lwm_template_file, lwm_file)
 
+    # Get the Land Water Mask object
+    className = GridIP.classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran']
+    LandWaterMask = getattr(GridIP,className)(granule_dict, afire_options)
+
+    # Get the geolocation
+    LandWaterMask.setGeolocationInfo()
+
+    # Subset the gridded data for this ancillary object to cover the required lat/lon range.
+    LandWaterMask.subset()
+
+    # Granulate the gridded data in this ancillary object for the current granule...
+    LandWaterMask.granulate()
+
+    # Write the new data to the LWM template file
+    LandWaterMask.shipOutToFile(lwm_file)
+    
     return 0, anc_dir
-
-def _granulate_GridIP(inDir,geoDicts,algList,dummy_granule_dict):
-    '''Granulates the input gridded static data into the required GridIP granulated datasets.'''
-
-    import GridIP
-    import Algorithms
-    global sdrEndian 
-    global ancEndian 
-
-    ANC_SCRIPTS_PATH = path.join(CSPP_RT_HOME,'viirs')
-    ADL_ASC_TEMPLATES = path.join(ANC_SCRIPTS_PATH,'asc_templates')
-
-    # Create a list of algorithm module "pointers"
-    algorithms = []
-    for alg in algList :
-        algName = Algorithms.modules[alg]
-        algorithms.append(getattr(Algorithms,algName))
-
-    # Obtain the required GridIP collection shortnames for each algorithm
-    collectionShortNames = []
-    for alg in algorithms :
-        for shortName in alg.GridIP_collectionShortNames :
-            LOG.info("Adding %s to the list of required collection short names..." \
-                    %(shortName))
-            collectionShortNames.append(shortName)
-
-    # Remove duplicate shortNames
-    collectionShortNames = list(set(collectionShortNames))
-    LOG.info("collectionShortNames = %r" %(collectionShortNames))
-
-    # Create a dict of GridIP class instances, which will handle ingest and granulation.
-    GridIP_objects = {}
-    for shortName in collectionShortNames :
-
-        className = GridIP.classNames[shortName]
-        GridIP_objects[shortName] = getattr(GridIP,className)(inDir=inDir,sdrEndian=sdrEndian)
-        LOG.debug("GridIP_objects[%s].blobDatasetName = %r" % (shortName,GridIP_objects[shortName].blobDatasetName))
-        
-        # Just in case the same GridIP class handles more than one collection short name
-        if (np.shape(GridIP_objects[shortName].collectionShortName) != () ):
-            LOG.debug("    GridIP_objects[%s].collectionShortName = %r" % (shortName,GridIP_objects[shortName].collectionShortName))
-            LOG.debug("    GridIP_objects[%s].xmlName = %r" % (shortName,GridIP_objects[shortName].xmlName))
-            GridIP_objects[shortName].collectionShortName = shortName
-            GridIP_objects[shortName].xmlName = GridIP_objects[shortName].xmlName[shortName]
-            LOG.debug("New GridIP_objects[%s].collectionShortName = %r" % (shortName,GridIP_objects[shortName].collectionShortName))
-            LOG.debug("New GridIP_objects[%s].xmlName = %r" % (shortName,GridIP_objects[shortName].xmlName))
-
-    # Loop through the required GridIP datasets and create the blobs.
-    granIdKey = lambda x: (x['N_Granule_ID'])
-    for dicts in sorted(geoDicts,key=granIdKey):
-        for shortName in collectionShortNames :
-        
-            LOG.info("Processing dataset %s for %s" % (GridIP_objects[shortName].blobDatasetName,shortName))
-
-            # Set the geolocation information in this ancillary object for the current granule...
-            GridIP_objects[shortName].setGeolocationInfo(dicts)
-
-            # Subset the gridded data for this ancillary object to cover the required lat/lon range.
-            GridIP_objects[shortName].subset()
-
-            # Granulate the gridded data in this ancillary object for the current granule...
-            GridIP_objects[shortName].granulate(GridIP_objects)
-
-            # Shipout the granulated data in this ancillary object to a blob/asc pair.
-            URID = GridIP_objects[shortName].shipOutToFile()
-
-            # If this granule ID is in the list of dummy IDs, add this URID to the 
-            # dummy_granule_dict dictionary.
-            N_Granule_ID = dicts['N_Granule_ID']
-            if N_Granule_ID in dummy_granule_dict.keys():
-                try :
-                    dummy_granule_dict[N_Granule_ID][shortName] = None
-                except :
-                    dummy_granule_dict[N_Granule_ID] = {shortName:None}
-
-                dummy_granule_dict[N_Granule_ID][shortName] = URID
-                
-    return dummy_granule_dict

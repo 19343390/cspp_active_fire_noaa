@@ -130,6 +130,7 @@ def main():
 
     afire_options = {}
     afire_options['inputs'] = args.inputs
+    afire_options['afire_home'] = os.path.abspath(afire_home)
     afire_options['work_dir'] = os.path.abspath(args.work_dir)
     afire_options['ancil_dir'] = afire_ancil_path
     afire_options['cache_dir'] = setup_cache_dir(args.cache_dir, afire_options['work_dir'],

@@ -18,8 +18,8 @@ from LandWaterMask        import LandWaterMask
 
 LOG = logging.getLogger('__init__')
 
-#classNames = {}
-#classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'] = 'LandWaterMask'
+classNames = {}
+classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'] = 'LandWaterMask'
 #classNames['VIIRS-GridIP-VIIRS-Qst-Mod-Gran'] = 'QuarterlySurfaceType'
 #classNames['VIIRS-GridIP-VIIRS-Qst-Lwm-Mod-Gran'] = 'QstLwm'
 

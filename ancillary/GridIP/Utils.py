@@ -30,9 +30,9 @@ from subprocess import CalledProcessError
 import numpy as np
 from bisect import bisect_left,bisect_right
 
-#import adl_blob2 as adl_blob
-#from adl_common import sh, env
-#from adl_common import ADL_HOME, CSPP_RT_HOME, CSPP_RT_ANC_PATH, CSPP_RT_ANC_CACHE_DIR, COMMON_LOG_CHECK_TABLE
+from netCDF4 import Dataset
+from netCDF4 import num2date
+import h5py
 
 # every module should have a LOG object
 try :
@@ -276,6 +276,184 @@ def findDatelineCrossings(latCrnList,lonCrnList):
 
     return num180Crossings_
 
+class Datafile_HDF5():
+    '''
+    An instantiation of this class provides access to the dataset and attributes
+    '''
+
+    def __init__(self,input_file):
+
+
+        self.input_file = input_file
+
+        if h5py.is_hdf5(self.input_file):
+            LOG.debug('Opening {} with HDF5...'.format(self.input_file))
+            self.file_obj = h5py.File(self.input_file,'r')
+        else:
+            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
+            sys.exit(1)
+
+        # Dictionary of file object attributes
+        self.attrs = {}
+        for attr_key in self.file_obj.attrs.keys():
+            self.attrs[attr_key] = self.file_obj.attrs[attr_key][0]
+            LOG.debug("file attrs[{}]  = {}".format(attr_key, self.attrs[attr_key]))
+
+        self.fill_val_keys = ['missing_value', '_FillValue']
+        self.fill_value = None
+        for fill_val_key in self.fill_val_keys:
+            if fill_val_key in  self.attrs.keys():
+                self.fill_value = self.attrs[fill_val_key]
+        LOG.debug("self.fill_value = {}".format(self.fill_value))
+
+        # Dictionary of dataset objects
+        self.data_dict = {}
+        for dset_obj in self.file_obj.values():
+            key = dset_obj.name
+            self.data_dict[key] = dset_obj
+
+        # List of dataset names
+        self.datanames = self.file_obj.keys()
+        self.datanames.sort()
+
+
+    class Dataset():
+
+        def __init__(selfd,dfile_obj,dataname):
+
+            selfd.dataname = dataname
+            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
+
+            selfd.dset_obj = dfile_obj.data_dict[dataname]
+
+            selfd.attrs = {}
+            for attr_key in selfd.dset_obj.attrs.keys():
+                selfd.attrs[attr_key] = selfd.dset_obj.attrs[attr_key][0]
+
+            if 'missing_value' in selfd.attrs.keys():
+                selfd.dset = ma.masked_equal(selfd.dset_obj[:], float(selfd.attrs['missing_value']))
+            else:
+                selfd.dset = selfd.dset_obj[:]
+
+    def close(self):
+        LOG.debug('Closing {}...'.format(self.input_file))
+        self.file_obj.close()
+
+class Datafile_NetCDF():
+    '''
+    An instantiation of this class provides access to the dataset and attributes
+    '''
+
+    def __init__(self,input_file):
+
+        self.input_file = input_file
+
+        if os.path.exists(self.input_file):
+            LOG.debug('Opening {} with NetCDF...'.format(self.input_file))
+            self.file_obj = Dataset(self.input_file)
+        else:
+            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
+            sys.exit(1)
+
+        # The file object dimensions
+        self.dimensions = {}
+        for key in self.file_obj.dimensions.keys():
+            self.dimensions[key] = len(self.file_obj.dimensions[key])
+            LOG.debug("dimension {} = {}".format(key,self.dimensions[key]))
+
+        # Dictionary of file object attributes
+        self.attrs = {}
+        for attr_key in self.file_obj.ncattrs():
+            self.attrs[attr_key] = getattr(self.file_obj,attr_key)
+            LOG.debug("file attrs[{}]  = {}".format(attr_key, self.attrs[attr_key]))
+
+        self.fill_val_keys = ['missing_value', '_FillValue']
+        self.fill_value = None
+        for fill_val_key in self.fill_val_keys:
+            if fill_val_key in  self.attrs.keys():
+                self.fill_value = self.attrs[fill_val_key]
+        LOG.debug("self.fill_value = {}".format(self.fill_value))
+
+        # Ordered dictionary of dataset objects
+        self.data_dict = self.file_obj.variables
+
+        # List of dataset names
+        self.datanames = self.data_dict.keys()
+        self.datanames.sort()
+
+
+    class Dataset():
+
+        def __init__(selfd,L1_obj,dataname):
+
+            selfd.dataname = dataname
+            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
+
+            selfd.dset_obj = L1_obj.file_obj.variables[dataname]
+
+            selfd.attrs = {}
+            for attr_key in selfd.dset_obj.ncattrs():
+                selfd.attrs[attr_key] = getattr(selfd.dset_obj,attr_key)
+
+            if '_FillValue' in selfd.attrs.keys():
+                selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
+            else:
+                selfd.dset = selfd.dset_obj[:]
+
+    def close(self):
+        LOG.debug('Closing {}...'.format(self.input_file))
+        self.file_obj.close()
+
+class Satellite_NetCDF():
+    '''
+    An instantiation of this class provides access to the dataset and attributes
+    '''
+
+    def __init__(self,input_file):
+
+        self.input_file = input_file
+
+        if os.path.exists(self.input_file):
+            LOG.debug('Opening {} with Satellite_NetCDF...'.format(self.input_file))
+            self.file_obj = Dataset(self.input_file)
+        else:
+            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
+            sys.exit(1)
+
+        # Dictionary of file object attributes
+        self.attrs = {}
+        for attr_key in self.file_obj.ncattrs():
+            self.attrs[attr_key] = getattr(self.file_obj,attr_key)
+
+        # Ordered dictionary of dataset objects
+        self.data_dict = self.file_obj.variables
+
+        # List of dataset names
+        self.datanames = self.data_dict.keys()
+        self.datanames.sort()
+
+    class Dataset():
+
+        def __init__(selfd,L1_obj,dataname,data=True):
+
+            selfd.dataname = dataname
+            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
+
+            selfd.dset_obj = L1_obj.file_obj.variables[dataname]
+
+            selfd.attrs = {}
+            for attr_key in selfd.dset_obj.ncattrs():
+                selfd.attrs[attr_key] = getattr(selfd.dset_obj,attr_key)
+
+            LOG.debug("data = {}".format(data))
+            if data:
+                selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
+
+            #selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
+
+    def close_file(self):
+        LOG.debug('Closing {}...'.format(self.input_file))
+        self.file_obj.close()
 
 def shipOutToFile(GridIPobj):
     '''
