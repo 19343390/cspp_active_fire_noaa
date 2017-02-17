@@ -105,7 +105,6 @@ def get_leapsec_table(leapsecond_dir):
 
     months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
     month_enum = {item:idx for idx,item in enumerate(months, start=1)}
-    #_, afire_ancil_path = check_and_convert_env_var('AFIRE_ANCIL_PATH')
     leapsec_filename = os.path.join(leapsecond_dir,'IETTime.dat')
     try:
         leapsec_file = open(leapsec_filename,"ro") # Open template file for reading
@@ -310,7 +309,7 @@ def construct_cmd_invocations(afire_data_dict):
     form...
 
     vfire GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
-        GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc AFIRE_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc \
+        GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc \
         metadata_id metadata_link time
     '''
     
@@ -329,13 +328,13 @@ def construct_cmd_invocations(afire_data_dict):
         afire_data_dict[granule_id]['GRLWM'] = {'file':land_water_mask}
 
         # Construct the output filename.
-        afire_output_file = 'AFIRE_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc'.format(
+        afire_output_file = 'AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc'.format(
                 afire_data_dict[granule_id]['GMTCO']['date'],
                 afire_data_dict[granule_id]['GMTCO']['start_time'],
                 afire_data_dict[granule_id]['GMTCO']['end_time'],
                 afire_data_dict[granule_id]['GMTCO']['orbit']
                 )
-        afire_data_dict[granule_id]['AFIRE'] = {'file':afire_output_file}
+        afire_data_dict[granule_id]['AFEDR'] = {'file':afire_output_file}
 
         # Construct the command line invocation. As the "vfire" binary is currently constructed,
         # The order of the inouts is important.
@@ -348,7 +347,7 @@ def construct_cmd_invocations(afire_data_dict):
                 os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
                 os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
                 os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
-                os.path.basename(afire_data_dict[granule_id]['AFIRE']['file'])
+                os.path.basename(afire_data_dict[granule_id]['AFEDR']['file'])
                 )
         afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
                 afire_data_dict[granule_id]['cmd'])
@@ -357,7 +356,7 @@ def construct_cmd_invocations(afire_data_dict):
         #afire_data_dict[granule_id]['cmd'] = 'echo "Executing {0:}..."; python -c "import numpy as np; import time; t = 0.5 * np.random.randn() + 5.; time.sleep(t)"; echo "Completed {0:}"; exit 0'.format(granule_id)
 
         # Construct the run directory name
-        afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFIRE_d{}_t{}_e{}_b{}_{}'.format(
+        afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFEDR_d{}_t{}_e{}_b{}_{}'.format(
                 afire_data_dict[granule_id]['GMTCO']['date'],
                 afire_data_dict[granule_id]['GMTCO']['start_time'],
                 afire_data_dict[granule_id]['GMTCO']['end_time'],

@@ -429,7 +429,7 @@ class LandWaterMask() :
             setattr(file_obj,'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))
             setattr(file_obj,'Image_Date', granule_dt.strftime("%Y%j"))
             setattr(file_obj,'Image_Time', granule_dt.strftime("%H%M%S"))
-            setattr(file_obj,'Source', 'dem30ARC, CSPP Active Fires v1.0')
+            setattr(file_obj,'Source', 'dem30ARC, CSPP Active Fires EDR v1.0')
 
             # Close the file
             file_obj.close()

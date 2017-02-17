@@ -25,6 +25,8 @@ from subprocess import Popen, CalledProcessError, call, PIPE
 import multiprocessing
 from datetime import datetime
 
+from netCDF4 import Dataset, Variable
+
 import log_common
 from utils import link_files, execution_time, execute_binary_captured_inject_io, cleanup
 
@@ -137,8 +139,8 @@ def afire_submitter(args):
             logfile_obj.close()
 
             # Move the output file from the run_dir to the work_dir
-            old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
-            new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
+            old_output_file = os.path.join(run_dir, granule_dict['AFEDR']['file'])
+            new_output_file = os.path.join(work_dir, granule_dict['AFEDR']['file'])
             new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
             LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
             try:
@@ -147,6 +149,16 @@ def afire_submitter(args):
                 rc_problem = 1
                 LOG.warning("Problem moving output file from {} to {}".format(
                     old_output_file, new_output_file))
+                LOG.debug(traceback.format_exc())
+
+            try:
+                file_obj = Dataset(new_output_file,"a", format="NETCDF4")
+                setattr(file_obj, 'date_created', creation_dt.isoformat())
+                setattr(file_obj, 'granule_id', granule_dict['granule_id'])
+                file_obj.close()
+            except Exception:
+                rc_problem = 1
+                LOG.warning("Problem setting attributes in output file {}".format(new_output_file))
                 LOG.debug(traceback.format_exc())
 
         # If no problems, remove the run dir

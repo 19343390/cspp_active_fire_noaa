@@ -161,18 +161,16 @@ def argument_parser():
 
 
     # Set up the logging
-
     levels = [logging.ERROR, logging.WARN, logging.INFO, logging.DEBUG]
     level = levels[args.verbosity if args.verbosity < 4 else 3]
-    #work_dir = check_and_convert_path("WORK_DIR", args.work_dir)
 
-
+    # Create the work directory if it doesn't exist
     work_dir = os.path.abspath(os.path.expanduser(args.work_dir))
     work_dir = create_dir(work_dir)
     work_dir = check_and_convert_path("WORK_DIR", work_dir)
 
-    d = datetime.now()
-    timestamp = d.isoformat()
+    dt = datetime.utcnow()
+    timestamp = dt.isoformat()
     logname = "cspp_active_fire_noaa." + timestamp + ".log"
     logfile = os.path.join(work_dir, logname)
     log_common.configure_logging(level, FILE=logfile)
