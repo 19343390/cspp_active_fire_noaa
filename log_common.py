@@ -10,13 +10,13 @@ Copyright (c) 2011 University of Wisconsin Regents.
 Licensed under GNU GPLv3.
 """
 
-import os
+#import os
 import sys
 import logging
 
-from utils import check_and_convert_path
+#from utils import check_and_convert_path
 
-import __main__
+#import __main__
 
 #from cffi import FFI
 #ffi = FFI()
@@ -26,6 +26,7 @@ ffi = None
 LOG = logging.getLogger(__name__)
 
 logging_configured = False
+
 
 class SingleLevelFilter(logging.Filter):
     '''
@@ -41,6 +42,7 @@ class SingleLevelFilter(logging.Filter):
         else:
             return (record.levelno in self.passlevels)
 
+
 def configure_logging(level=logging.WARNING, FILE=None):
     """
     route logging INFO and DEBUG to stdout instead of stderr, affects entire application
@@ -50,20 +52,21 @@ def configure_logging(level=logging.WARNING, FILE=None):
     # create a formatter to be used across everything
     #fm = logging.Formatter('%(levelname)s:%(name)s:%(msg)s') # [%(filename)s:%(lineno)d]')
 
-    ### Orig
+    # Orig
     #fm = logging.Formatter('(%(levelname)s):%(filename)s:%(funcName)s:%(lineno)d:%(message)s')
 
-    if level == logging.DEBUG :
-        fm = logging.Formatter('%(asctime)s.%(msecs)03d (%(levelname)s) : %(filename)s : %(funcName)s : %(lineno)d:%(message)s',\
-                datefmt='%Y-%m-%d %H:%M:%S')
+    if level == logging.DEBUG:
+        fm = logging.Formatter(
+            '%(asctime)s.%(msecs)03d (%(levelname)s) : %(filename)s : %(funcName)s :' +
+            '%(lineno)d:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     else:
-        fm = logging.Formatter('%(asctime)s.%(msecs)03d (%(levelname)s) : %(message)s',\
-                datefmt='%Y-%m-%d %H:%M:%S')
+        fm = logging.Formatter('%(asctime)s.%(msecs)03d (%(levelname)s) : %(message)s',
+                               datefmt='%Y-%m-%d %H:%M:%S')
 
     rootLogger = logging.getLogger()
 
     # set up the default logging
-    if logging_configured == False:
+    if logging_configured is False:
         logging_configured = True
 
         # create a handler which routes info and debug to stdout with std formatting
@@ -82,7 +85,7 @@ def configure_logging(level=logging.WARNING, FILE=None):
 
     h3 = None
     if FILE is not None:
-        work_dir = os.path.dirname(FILE)
+        #work_dir = os.path.dirname(FILE)
         h3 = logging.FileHandler(filename=FILE)
         #        f3 = SingleLevelFilter([logging.INFO, logging.DEBUG], False)
         #        h3.addFilter(f3)
@@ -91,11 +94,13 @@ def configure_logging(level=logging.WARNING, FILE=None):
 
     rootLogger.setLevel(level)
 
+
 def status_line(status):
     """
     Put out a special status line
     """
-    LOG.info('\n                 ( %s )\n'%status)
+    LOG.info('\n                 ( %s )\n' % status)
+
 
 def log_from_C(in_type, in_msg):
     type = ffi.string(in_type)
@@ -114,8 +119,10 @@ def log_from_C(in_type, in_msg):
 
     return int(0)
 
+
 log_callback = None
 log_lib = None
+
 
 def C_log_support(ffi_in):
     """
@@ -134,11 +141,12 @@ def C_log_support(ffi_in):
     int LOG_warn( char *message);
     int LOG_debug( char *message);
     int LOG_error( char *message);
-    """ )
+    """)
 
     log_lib = ffi.dlopen("liblog_common_cb.so")
     log_callback = ffi.callback("int(char*,char *)", log_from_C)
     log_lib.set_log(log_callback)
+
 
 def _test_logging():
     LOG.debug('debug message')
@@ -146,6 +154,7 @@ def _test_logging():
     LOG.warning('warning message')
     LOG.error('error message')
     LOG.critical('critical message')
+
 
 def test_C_callbacks():
     message = 'error'
@@ -164,6 +173,7 @@ def test_C_callbacks():
     arg4 = ffi.new("char[]", message)
     log_lib.LOG_debug(arg4)
 
+
 if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG) we don't want basicConfig anymore
     configure_logging(level=logging.DEBUG, FILE="./testlog.log")
@@ -171,4 +181,3 @@ if __name__ == '__main__':
 
     C_log_support()
 #    test_C_callbacks()
-

@@ -14,19 +14,16 @@ Licensed under GNU GPLv3.
 """
 
 import os
-import sys
+#import sys
 import re
-import string
-import shutil
+#import string
+#import shutil
 import logging
-import time
+#import time
 from glob import glob
 import numpy as np
-import traceback
+#import traceback
 from datetime import datetime
-
-from utils import link_files, check_and_convert_path, check_and_convert_env_var, \
-        check_existing_env_var, CsppEnvironment
 
 LOG = logging.getLogger('active_file_interface')
 
@@ -36,17 +33,17 @@ def get_granule_ID(IET_StartTime):
     Calculates the deterministic granule ID. From...
     ADL/CMN/Utilities/INF/util/gran/src/InfUtil_GranuleID.cpp
     """
-    # NPP_GRANULE_ID_BASETIME corresponds to the number of microseconds between 
+    # NPP_GRANULE_ID_BASETIME corresponds to the number of microseconds between
     # datetime(2011, 10, 23, 0, 0, 0) and the IDPS epoch time (IET) datetime(1958,1,1), plus the 34
     # leap seconds that had been added between the IET epoch and 2011.
     NPP_GRANULE_ID_BASETIME = int(os.environ.get('NPP_GRANULE_ID_BASETIME', 1698019234000000))
     granuleSize = 85350000      # microseconds
 
     # Subtract the spacecraft base time from the arbitrary time to obtain
-    # an elapsed time. 
+    # an elapsed time.
     elapsedTime = IET_StartTime - NPP_GRANULE_ID_BASETIME
 
-    # Divide the elapsed time by the granule size to obtain the granule number; 
+    # Divide the elapsed time by the granule size to obtain the granule number;
     # the integer division will give the desired floor value.
     granuleNumber = int(np.floor(elapsedTime / granuleSize))
     #granuleNumber = np.ceil(elapsedTime / granuleSize)
@@ -58,12 +55,12 @@ def get_granule_ID(IET_StartTime):
     #startBoundary = (granuleNumber * granuleSize) + NPP_GRANULE_ID_BASETIME
     #endBoundary = startBoundary + granuleSize
 
-    # assign the granule start and end boundary times to the class members 
+    # assign the granule start and end boundary times to the class members
     #granuleStartTime = startBoundary
     #granuleEndTime = endBoundary
-    
+
     # multiply the granule number by the granule size
-    # then divide by 10^5 to convert the microseconds to tenths of a second; 
+    # then divide by 10^5 to convert the microseconds to tenths of a second;
     # the integer division will give the desired floor value.
     timeCode = int(float(granuleNumber * granuleSize) / 100000.)
 
@@ -71,9 +68,10 @@ def get_granule_ID(IET_StartTime):
 
     return N_Granule_ID
 
+
 def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
     '''
-    Computes a datetime object from "filename" using the regex "pattern", and determines the 
+    Computes a datetime object from "filename" using the regex "pattern", and determines the
     elapsed time since "epoch".
     '''
     # Compile the regular expression for the filename...
@@ -86,11 +84,11 @@ def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
     LOG.debug("file_info = {}".format(file_info))
 
     # Determine the granule ID.
-    dt_string = "{}_{}".format(file_info['date'],file_info['start_time'])
+    dt_string = "{}_{}".format(file_info['date'], file_info['start_time'])
     LOG.debug("dt_string = {}".format(dt_string))
-    dt = datetime.strptime(dt_string,"%Y%m%d_%H%M%S%f")
+    dt = datetime.strptime(dt_string, "%Y%m%d_%H%M%S%f")
     LOG.debug("dt = {}".format(dt))
-    leap_seconds = int(get_leapseconds(leapsec_dt_list,dt))
+    leap_seconds = int(get_leapseconds(leapsec_dt_list, dt))
     LOG.debug("leap_seconds = {}".format(leap_seconds))
     iet_time = int(((dt - epoch).total_seconds() + leap_seconds) * 1000000.)
     LOG.debug("iet_time = {}".format(iet_time))
@@ -98,33 +96,35 @@ def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
 
     return granule_id, file_info, dt
 
+
 def get_leapsec_table(leapsecond_dir):
     '''
     Read the IETTime.dat file containing the leap seconds since 1972, and save into a list of dicts.
     '''
 
     months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-    month_enum = {item:idx for idx,item in enumerate(months, start=1)}
-    leapsec_filename = os.path.join(leapsecond_dir,'IETTime.dat')
+    month_enum = {item: idx for idx, item in enumerate(months, start=1)}
+    leapsec_filename = os.path.join(leapsecond_dir, 'IETTime.dat')
     try:
-        leapsec_file = open(leapsec_filename,"ro") # Open template file for reading
-    except Exception, err :
+        leapsec_file = open(leapsec_filename, "ro")  # Open template file for reading
+    except Exception, err:
         LOG.error("{}, aborting.".format(err))
 
     leapsec_dt_list = []
     for line in leapsec_file.readlines():
-        line = line.replace("\n","")
+        line = line.replace("\n", "")
         fields = line.split(" ")
         fields = filter(lambda x: x != '', fields)
         year = int(fields[0])
         month = month_enum[fields[1]]
         day = int(fields[2])
         leap_secs = int(float(fields[6]))
-        leap_dt = datetime(year,month,day)
-        leapsec_dt_list.append({'dt':leap_dt, 'leapsecs':leap_secs})
+        leap_dt = datetime(year, month, day)
+        leapsec_dt_list.append({'dt': leap_dt, 'leapsecs': leap_secs})
     leapsec_file.close()
 
     return leapsec_dt_list
+
 
 def get_leapseconds(leapsec_table, dt):
     '''
@@ -143,10 +143,11 @@ def get_leapseconds(leapsec_table, dt):
 
     return leap_seconds
 
+
 def generate_file_list(inputs, afire_options, full=False):
     '''
-    Trawl through the files and directories given at the command line, pick out those matching the 
-    desired file types, and att them to a master list of raw data files. This list need not be 
+    Trawl through the files and directories given at the command line, pick out those matching the
+    desired file types, and att them to a master list of raw data files. This list need not be
     sorted into time order.
     '''
 
@@ -160,7 +161,7 @@ def generate_file_list(inputs, afire_options, full=False):
         input_files.sort()
         return input_files
 
-    input_prefixes = ['GMTCO','SVM05','SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
+    input_prefixes = ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
 
     input_dirs = []
     input_files = []
@@ -168,12 +169,12 @@ def generate_file_list(inputs, afire_options, full=False):
     # Sort the command line inputs into directory and file inputs...
     for input in inputs:
         input = os.path.abspath(os.path.expanduser(input))
-        if os.path.isdir(input) :
+        if os.path.isdir(input):
             # Input file glob is of form "/path/to/files"
             LOG.debug("Input {} is a directory containing files...".format(input))
             input_dirs.append(input)
-        elif os.path.isfile(input) :
-            ## Input file glob is of form "/path/to/files/goes13_1_2015_143_1745.input"
+        elif os.path.isfile(input):
+            # Input file glob is of form "/path/to/files/goes13_1_2015_143_1745.input"
             LOG.debug("Input {} is a file.".format(input))
             input_files.append(input)
 
@@ -187,19 +188,18 @@ def generate_file_list(inputs, afire_options, full=False):
     for files in input_files:
         LOG.debug("input files {}".format(files))
 
-
     # The re defining the fields of an NPP CDFCB-format filename
     RE_NPP_list = ['(?P<kind>[A-Z]+)(?P<band>[0-9]*)_',
-            '(?P<sat>[A-Za-z0-9]+)_','d(?P<date>\d+)_',
-            't(?P<start_time>\d+)_',
-            'e(?P<end_time>\d+)_b(?P<orbit>\d+)_',
-            'c(?P<created_time>\d+)_',
-            '(?P<site>[a-zA-Z0-9]+)_',
-            '(?P<domain>[a-zA-Z0-9]+)\.h5']
+                   '(?P<sat>[A-Za-z0-9]+)_', 'd(?P<date>\d+)_',
+                   't(?P<start_time>\d+)_',
+                   'e(?P<end_time>\d+)_b(?P<orbit>\d+)_',
+                   'c(?P<created_time>\d+)_',
+                   '(?P<site>[a-zA-Z0-9]+)_',
+                   '(?P<domain>[a-zA-Z0-9]+)\.h5']
     RE_NPP_str = "".join(RE_NPP_list)
-    
+
     # Get a table of the leap seconds
-    iet_epoch = datetime(1958,1,1)
+    iet_epoch = datetime(1958, 1, 1)
     LOG.debug("Epoch time: {}".format(iet_epoch))
     leapsec_dt_list = get_leapsec_table(afire_options['ancil_dir'])
 
@@ -217,16 +217,17 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for files in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, 
-                        leapsec_dt_list)
+                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str,
+                                                                         iet_epoch, leapsec_dt_list)
 
                 LOG.debug("granule_id = {}".format(granule_id))
 
-                kind_key = '{}{}'.format(file_info['kind'],file_info['band'])
+                kind_key = '{}{}'.format(file_info['kind'], file_info['band'])
                 try:
                     data_dict[granule_id][kind_key] = file_info
                 except KeyError:
-                    LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(granule_id))
+                    LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(
+                        granule_id))
                     data_dict[granule_id] = {}
                     data_dict[granule_id][kind_key] = file_info
 
@@ -242,7 +243,8 @@ def generate_file_list(inputs, afire_options, full=False):
     for files in input_files:
         LOG.debug("input file: {}".format(files))
 
-        granule_id,_,_ = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, leapsec_dt_list)
+        granule_id, _, _ = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch,
+                                                        leapsec_dt_list)
         LOG.debug("granule_id = {}".format(granule_id))
         granule_id_from_files.append(granule_id)
 
@@ -268,7 +270,7 @@ def generate_file_list(inputs, afire_options, full=False):
     LOG.debug("original input dirs from files: {}".format(input_dirs_from_files))
     for dirs in input_dirs_from_files:
         if dirs in input_dirs:
-            LOG.debug("input dirs from files '{}' already in input_dirs".format(dirs,input_dirs))
+            LOG.debug("input dirs from files '{}' already in input_dirs".format(dirs, input_dirs))
             input_dirs_from_files = filter(lambda x: x != dirs, input_dirs_from_files)
 
     LOG.debug("filtered input dirs from files: {}".format(input_dirs_from_files))
@@ -284,17 +286,18 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for files in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch, 
-                        leapsec_dt_list)
+                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str,
+                                                                         iet_epoch, leapsec_dt_list)
 
                 LOG.debug("granule_id = {}".format(granule_id))
 
                 if granule_id in granule_id_from_files:
-                    kind_key = '{}{}'.format(file_info['kind'],file_info['band'])
+                    kind_key = '{}{}'.format(file_info['kind'], file_info['band'])
                     try:
                         data_dict[granule_id][kind_key] = file_info
                     except KeyError:
-                        LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(granule_id))
+                        LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(
+                            granule_id))
                         data_dict[granule_id] = {}
                         data_dict[granule_id][kind_key] = file_info
 
@@ -303,16 +306,17 @@ def generate_file_list(inputs, afire_options, full=False):
 
     return data_dict
 
+
 def construct_cmd_invocations(afire_data_dict):
     '''
-    Take the list inputs, and construct the required command line invocations. Commands are of the 
+    Take the list inputs, and construct the required command line invocations. Commands are of the
     form...
 
     vfire GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
         GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc \
         metadata_id metadata_link time
     '''
-    
+
     granule_id_list = afire_data_dict.keys()
     granule_id_list.sort()
 
@@ -320,49 +324,49 @@ def construct_cmd_invocations(afire_data_dict):
 
         # Construct the land water mask filename
         land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc'.format(
-                afire_data_dict[granule_id]['GMTCO']['date'],
-                afire_data_dict[granule_id]['GMTCO']['start_time'],
-                afire_data_dict[granule_id]['GMTCO']['end_time'],
-                afire_data_dict[granule_id]['GMTCO']['orbit']
-                )
-        afire_data_dict[granule_id]['GRLWM'] = {'file':land_water_mask}
+            afire_data_dict[granule_id]['GMTCO']['date'],
+            afire_data_dict[granule_id]['GMTCO']['start_time'],
+            afire_data_dict[granule_id]['GMTCO']['end_time'],
+            afire_data_dict[granule_id]['GMTCO']['orbit']
+        )
+        afire_data_dict[granule_id]['GRLWM'] = {'file': land_water_mask}
 
         # Construct the output filename.
         afire_output_file = 'AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc'.format(
-                afire_data_dict[granule_id]['GMTCO']['date'],
-                afire_data_dict[granule_id]['GMTCO']['start_time'],
-                afire_data_dict[granule_id]['GMTCO']['end_time'],
-                afire_data_dict[granule_id]['GMTCO']['orbit']
-                )
-        afire_data_dict[granule_id]['AFEDR'] = {'file':afire_output_file}
+            afire_data_dict[granule_id]['GMTCO']['date'],
+            afire_data_dict[granule_id]['GMTCO']['start_time'],
+            afire_data_dict[granule_id]['GMTCO']['end_time'],
+            afire_data_dict[granule_id]['GMTCO']['orbit']
+        )
+        afire_data_dict[granule_id]['AFEDR'] = {'file': afire_output_file}
 
         # Construct the command line invocation. As the "vfire" binary is currently constructed,
         # The order of the inouts is important.
         afire_data_dict[granule_id]['cmd'] = './vfire_static {} {} {} {} {} {} {} {} {} '.format(
-                os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM16']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
-                os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
-                os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
-                os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
-                os.path.basename(afire_data_dict[granule_id]['AFEDR']['file'])
-                )
+            os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
+            os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),
+            os.path.basename(afire_data_dict[granule_id]['SVM16']['file']),
+            os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
+            os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
+            os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
+            os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
+            os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
+            os.path.basename(afire_data_dict[granule_id]['AFEDR']['file'])
+        )
         afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
-                afire_data_dict[granule_id]['cmd'])
+            afire_data_dict[granule_id]['cmd'])
         #afire_data_dict[granule_id]['cmd'] = 'sleep 0.5; echo "Executing {0:}"; exit 0'.format(granule_id)
         #afire_data_dict[granule_id]['cmd'] = 'sleep 1; echo "Executing {}"; exit 0'.format(granule_id)
         #afire_data_dict[granule_id]['cmd'] = 'echo "Executing {0:}..."; python -c "import numpy as np; import time; t = 0.5 * np.random.randn() + 5.; time.sleep(t)"; echo "Completed {0:}"; exit 0'.format(granule_id)
 
         # Construct the run directory name
         afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFEDR_d{}_t{}_e{}_b{}_{}'.format(
-                afire_data_dict[granule_id]['GMTCO']['date'],
-                afire_data_dict[granule_id]['GMTCO']['start_time'],
-                afire_data_dict[granule_id]['GMTCO']['end_time'],
-                afire_data_dict[granule_id]['GMTCO']['orbit'],
-                granule_id
-                )
+            afire_data_dict[granule_id]['GMTCO']['date'],
+            afire_data_dict[granule_id]['GMTCO']['start_time'],
+            afire_data_dict[granule_id]['GMTCO']['end_time'],
+            afire_data_dict[granule_id]['GMTCO']['orbit'],
+            granule_id
+        )
 
         afire_data_dict[granule_id]['granule_id'] = granule_id
 

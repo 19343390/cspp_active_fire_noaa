@@ -26,8 +26,8 @@ import shutil
 from copy import copy
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime, timedelta
-import threading
-from threading import Thread, Event
+#import threading
+from threading import Thread
 from Queue import Queue, Empty
 
 
@@ -35,6 +35,7 @@ LOG = logging.getLogger(__name__)
 
 PROFILING_ENABLED = os.environ.get('CSPP_PROFILE', None) is not None
 STRACE_ENABLED = os.environ.get('CSPP_STRACE', None) is not None
+
 
 def split_search_path(s):
     '''
@@ -49,6 +50,7 @@ def split_search_path(s):
 
     return back_list
 
+
 def _replaceAll(intputfile, searchExp, replaceExp):
     '''
     Replace all instances of 'searchExp' with 'replaceExp' in 'intputfile'
@@ -59,6 +61,7 @@ def _replaceAll(intputfile, searchExp, replaceExp):
         sys.stdout.write(line)
     fileinput.close()
 
+
 def cleanup(work_dir, objs_to_remove):
     """
     cleanup work directiory
@@ -66,14 +69,15 @@ def cleanup(work_dir, objs_to_remove):
     """
     for file_obj in objs_to_remove:
         try:
-            if os.path.isdir(file_obj) :
+            if os.path.isdir(file_obj):
                 LOG.debug('Removing directory: {}'.format(file_obj))
                 shutil.rmtree(file_obj)
-            elif os.path.isfile(file_obj) :
+            elif os.path.isfile(file_obj):
                 LOG.debug('Removing file: {}'.format(file_obj))
                 os.unlink(file_obj)
         except Exception:
             LOG.warn(traceback.format_exc())
+
 
 class AscLineParser(object):
     def time_range(self, ascLine):
@@ -90,6 +94,7 @@ class AscLineParser(object):
     def time_from_tokens(self, day, time):
         dt = datetime.strptime(day + time, '%Y-%m-%d%H:%M:%S.%f')
         return dt
+
 
 def link_files(dest_path, files):
     '''
@@ -108,11 +113,14 @@ def link_files(dest_path, files):
             files_linked += 1
     return files_linked
 
+
 class CsppEnvironment(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         return repr(self.value)
+
 
 def check_and_convert_path(key, a_path, check_write=False):
     '''
@@ -129,10 +137,11 @@ def check_and_convert_path(key, a_path, check_write=False):
 
     for path in paths:
         if not os.path.exists(path):
-            if key :
-                msg="Environment variable {} refers to a path that does not exist.  {}={}".format(key, key, path)
-            else :
-                msg="Required path {} does not exist.".format(path)
+            if key:
+                msg = "Environment variable {} refers to a path that does not exist.  {}={}".format(
+                    key, key, path)
+            else:
+                msg = "Required path {} does not exist.".format(path)
 
             raise CsppEnvironment(msg)
             #sys.exit(2)
@@ -143,7 +152,7 @@ def check_and_convert_path(key, a_path, check_write=False):
 
         if check_write:
             if not os.access(path, os.W_OK):
-                msg="Path exists but is not writable {}={}".format(key, path)
+                msg = "Path exists but is not writable {}={}".format(key, path)
                 raise CsppEnvironment(msg)
 
     # return a string if only one and an array if more
@@ -186,6 +195,7 @@ def what_package_am_i():
 
     return cspp_x_home
 
+
 def _ldd_verify(exe):
     '''
     check that a program is ready to run
@@ -194,13 +204,14 @@ def _ldd_verify(exe):
     return rc == 0
 
 
-def check_env():
-    '''
-    Check that needed environment variables are set
-    '''
-    for key in EXTERNAL_BINARY.iterkeys():
-        if not _ldd_verify(EXTERNAL_BINARY[key]):
-            LOG.warning("%r executable is unlikely to run, is LD_LIBRARY_PATH set?" % EXTERNAL_BINARY[key])
+#def check_env():
+    #'''
+    #Check that needed environment variables are set
+    #'''
+    #for key in EXTERNAL_BINARY.iterkeys():
+        #if not _ldd_verify(EXTERNAL_BINARY[key]):
+            #LOG.warning("{} executable is unlikely to run, is LD_LIBRARY_PATH set?".format(
+                #EXTERNAL_BINARY[key]))
 
 
 def env(**kv):
@@ -212,38 +223,41 @@ def env(**kv):
 
     return zult
 
+
 def _convert_datetime(s):
     '''
     converter which takes strings from ASC and converts to computable datetime objects
     '''
     pt = s.rfind('.')
-    micro_s = s[pt+1:]
-    micro_s += '0'*(6-len(micro_s))
+    micro_s = s[pt + 1:]
+    micro_s += '0' * (6 - len(micro_s))
     #when = dt.datetime.strptime(s[:pt], '%Y-%m-%d %H:%M:%S').replace(microsecond = int(micro_s))
-    when = datetime.strptime(s[:pt], '%Y-%m-%d %H:%M:%S').replace(microsecond = int(micro_s))
+    when = datetime.strptime(s[:pt], '%Y-%m-%d %H:%M:%S').replace(microsecond=int(micro_s))
     return when
+
 
 def _convert_isodatetime(s):
     '''
     converter which takes strings from ASC and converts to computable datetime objects
     '''
     pt = s.rfind('.')
-    micro_s = s[pt+1:]
-    micro_s += '0'*(6-len(micro_s))
+    micro_s = s[pt + 1:]
+    micro_s += '0' * (6 - len(micro_s))
     #when = dt.datetime.strptime(s[:pt], '%Y-%m-%d %H:%M:%S').replace(microsecond = int(micro_s))
-    when = datetime.strptime(s[:pt], '%Y-%m-%dT%H:%M:%S').replace(microsecond = int(micro_s))
+    when = datetime.strptime(s[:pt], '%Y-%m-%dT%H:%M:%S').replace(microsecond=int(micro_s))
     return when
+
 
 def make_time_stamp_d(timeObj):
     '''
     Returns a timestamp ending in deciseconds
     '''
     dateStamp = timeObj.strftime("%Y-%m-%d")
-    seconds = repr(int(round(timeObj.second + float(timeObj.microsecond)/1000000.)))
-    deciSeconds = int(round(float(timeObj.microsecond)/100000.))
+    #seconds = repr(int(round(timeObj.second + float(timeObj.microsecond) / 1000000.)))
+    deciSeconds = int(round(float(timeObj.microsecond) / 100000.))
     deciSeconds = repr(0 if deciSeconds > 9 else deciSeconds)
-    timeStamp = "{}.{}".format(timeObj.strftime("%H:%M:%S"),deciSeconds)
-    return "{} {}".format(dateStamp,timeStamp)
+    timeStamp = "{}.{}".format(timeObj.strftime("%H:%M:%S"), deciSeconds)
+    return "{} {}".format(dateStamp, timeStamp)
 
 
 def make_time_stamp_m(timeObj):
@@ -251,11 +265,12 @@ def make_time_stamp_m(timeObj):
     Returns a timestamp ending in milliseconds
     '''
     dateStamp = timeObj.strftime("%Y-%m-%d")
-    seconds = repr(int(round(timeObj.second + float(timeObj.microsecond)/1000000.)))
-    milliseconds = int(round(float(timeObj.microsecond)/1000.))
+    #seconds = repr(int(round(timeObj.second + float(timeObj.microsecond) / 1000000.)))
+    milliseconds = int(round(float(timeObj.microsecond) / 1000.))
     milliseconds = repr(000 if milliseconds > 999 else milliseconds)
-    timeStamp = "{}.{}".format(timeObj.strftime("%H:%M:%S"),str(milliseconds).zfill(3))
-    return "{} {}".format(dateStamp,timeStamp)
+    timeStamp = "{}.{}".format(timeObj.strftime("%H:%M:%S"), str(milliseconds).zfill(3))
+    return "{} {}".format(dateStamp, timeStamp)
+
 
 def execution_time(startTime, endTime):
     '''
@@ -269,13 +284,14 @@ def execution_time(startTime, endTime):
     hours, remainder = divmod(remainder, 3600.)
     minutes, seconds = divmod(remainder, 60.)
 
-    time_dict['delta']   = delta
-    time_dict['days']    = int(days)
-    time_dict['hours']   = int(hours)
+    time_dict['delta'] = delta
+    time_dict['days'] = int(days)
+    time_dict['hours'] = int(hours)
     time_dict['minutes'] = int(minutes)
     time_dict['seconds'] = seconds
 
     return time_dict
+
 
 class NonBlockingStreamReader:
     '''
@@ -312,24 +328,25 @@ class NonBlockingStreamReader:
             except ValueError:
                 LOG.debug("ValueError: The process output stream has ended.")
 
-        self.thread = Thread(target = _populateQueue, args = (self.stream, self.queue))
+        self.thread = Thread(target=_populateQueue, args=(self.stream, self.queue))
         self.thread.daemon = True
-        self.thread.start() #start collecting lines from the stream
+        self.thread.start()  # start collecting lines from the stream
 
-    def readline(self, timeout = None):
+    def readline(self, timeout=None):
         try:
-            return self.queue.get(block = timeout is not None,
-                    timeout = timeout)
+            return self.queue.get(block=timeout is not None,
+                                  timeout=timeout)
         except Empty:
             #print "Need to close the thread"
             return None
+
 
 class UnexpectedEndOfStream(Exception):
     pass
 
 
 def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=True, log_stdout=True,
-        log_stderr=True, **kv):
+                                      log_stderr=True, **kv):
     '''
     Execute an external script, capturing stdout and stderr without blocking the
     called script.
@@ -354,49 +371,50 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
 
     # get the output
     out_str = ""
-    while pop.poll()==None and nbsr_stdout.thread.is_alive() and nbsr_stderr.thread.is_alive():
+    while pop.poll() is None and nbsr_stdout.thread.is_alive() and nbsr_stderr.thread.is_alive():
 
         '''
         Trawl through the stdout stream
         '''
-        output_stdout = nbsr_stdout.readline(0.01) # 0.01 secs to let the shell output the result
+        output_stdout = nbsr_stdout.readline(0.01)  # 0.01 secs to let the shell output the result
 
         if output_stdout is not None:
 
             # Gather the stdout stream for output to a log file.
             time_obj = datetime.utcnow()
             time_stamp = make_time_stamp_m(time_obj)
-            out_str += "{} (INFO)  : {}".format(time_stamp,output_stdout)
+            out_str += "{} (INFO)  : {}".format(time_stamp, output_stdout)
 
             # Search stdout for exe error strings and pass them to the logger.
             for error_key in error_keys:
                 error_pattern = err_dict[error_key]['pattern']
                 if error_pattern in output_stdout:
-                    output_stdout = string.replace(output_stdout,"\n","")
+                    output_stdout = string.replace(output_stdout, "\n", "")
                     err_dict[error_key]['count'] += 1
 
                     if err_dict[error_key]['count_only']:
                         if err_dict[error_key]['count'] < err_dict[error_key]['max_count']:
-                            LOG.warn(string.replace(output_stdout,"\n",""))
+                            LOG.warn(string.replace(output_stdout, "\n", ""))
                         if err_dict[error_key]['count'] == err_dict[error_key]['max_count']:
-                            LOG.warn(string.replace(output_stdout,"\n",""))
-                            LOG.warn('Maximum number of "{}" messages reached, further instances will be counted only'
-                                    .format(error_key))
+                            LOG.warn(string.replace(output_stdout, "\n", ""))
+                            LOG.warn(
+                                'Maximum number of "{}" messages reached,' +
+                                'further instances will be counted only'.format(error_key))
                     else:
-                        LOG.warn(string.replace(output_stdout,"\n",""))
+                        LOG.warn(string.replace(output_stdout, "\n", ""))
                     break
 
         '''
         Trawl through the stderr stream
         '''
-        output_stderr = nbsr_stderr.readline() # 0.1 secs to let the shell output the result
+        output_stderr = nbsr_stderr.readline()  # 0.1 secs to let the shell output the result
 
         if output_stderr is not None:
 
             # Gather the stderr stream for output to a log file.
             time_obj = datetime.utcnow()
             time_stamp = make_time_stamp_m(time_obj)
-            out_str += "{} (WARNING) : {}".format(time_stamp,output_stderr)
+            out_str += "{} (WARNING) : {}".format(time_stamp, output_stderr)
 
         '''
         Check to see if the stdout and stderr streams are ended
@@ -409,8 +427,8 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
     # Flush the remaining content in the stdout and stderr streams
     while True:
         try:
-            output_stdout = nbsr_stdout.readline(0.01) # 0.01 secs to let the shell output the result
-            output_stderr = nbsr_stderr.readline() # 0.1 secs to let the shell output the result
+            output_stdout = nbsr_stdout.readline(0.01)  # 0.01 secs to let the shell output the result
+            output_stderr = nbsr_stderr.readline()  # 0.1 secs to let the shell output the result
 
             if output_stdout is not None or output_stderr is not None:
 
@@ -418,13 +436,13 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
                     # Gather the stdout stream for output to a log file.
                     time_obj = datetime.utcnow()
                     time_stamp = make_time_stamp_m(time_obj)
-                    out_str += "{} (INFO)  : {}".format(time_stamp,output_stdout)
+                    out_str += "{} (INFO)  : {}".format(time_stamp, output_stdout)
 
                 if output_stderr is not None:
                     # Gather the stderr stream for output to a log file.
                     time_obj = datetime.utcnow()
                     time_stamp = make_time_stamp_m(time_obj)
-                    out_str += "{} (WARNING)  : {}".format(time_stamp,output_stderr)
+                    out_str += "{} (WARNING)  : {}".format(time_stamp, output_stderr)
             else:
                 break
 
@@ -439,20 +457,20 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
     while continue_polling:
         if rc_poll_attempts == max_rc_poll_attempts:
             LOG.warn(
-            'Maximum number of attempts ({}) of obtaining return code for {} reached, setting to zero.'
-            .format(rc_poll_attempts,cmd.split(" ")[-1],))
+                'Maximum number of attempts ({}) of obtaining return code for {} reached,' +
+                'setting to zero.'.format(rc_poll_attempts, cmd.split(" ")[-1],))
             rc = 0
             break
 
         rc = pop.returncode
-        LOG.debug("{} : pop.returncode = {}".format(cmd.split(" ")[-1],rc))
-        if rc != None:
+        LOG.debug("{} : pop.returncode = {}".format(cmd.split(" ")[-1], rc))
+        if rc is not None:
             continue_polling = False
 
         rc_poll_attempts += 1
         time.sleep(0.5)
 
-    LOG.debug("{}: rc = {}".format(cmd,rc))
+    LOG.debug("{}: rc = {}".format(cmd, rc))
 
     return rc, out_str
 
@@ -562,7 +580,8 @@ def get_return_code(num_unpacking_problems, num_xml_files_to_process,
     if num_unpacking_problems > 0:
         rc |= 2
         LOG.error('Failed to unpack input data.')
-    if num_xml_files_to_process and (num_xml_files_to_process <= num_no_output_runs):  # skipping this check if no XML files to process
+    # skipping this check if no XML files to process
+    if num_xml_files_to_process and (num_xml_files_to_process <= num_no_output_runs):
         rc |= 1
         LOG.error('Failed to generate any SDR granules.')
     if environment_error:
@@ -581,6 +600,7 @@ def get_return_code(num_unpacking_problems, num_xml_files_to_process,
     else:
         LOG.info('Normal Completion.')
     return rc
+
 
 def create_dir(dir):
     '''
@@ -626,6 +646,7 @@ def create_dir(dir):
     LOG.debug('Final returned_dir = {}'.format(returned_dir))
     return returned_dir
 
+
 def setup_cache_dir(cache_dir, work_dir, cache_env_name):
     '''
     Setup the cache directory
@@ -635,22 +656,22 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
 
     # Explicit setting of cache dir from the command line option
     LOG.info('Checking cache directory...')
-    if cache_dir != None:
+    if cache_dir is not None:
         cache_dir = os.path.abspath(os.path.expanduser(cache_dir))
         LOG.info('Creating cache dir from command line option ...')
         returned_cache_dir = copy(cache_dir)
         returned_cache_dir = create_dir(returned_cache_dir)
 
     # Explicit setting of cache dir failed, falling back to AFIRE_CACHE_PATH...
-    if returned_cache_dir is None: 
+    if returned_cache_dir is None:
         LOG.info('Creating cache dir from AFIRE_CACHE_PATH...')
-        returned_cache_dir = check_existing_env_var('AFIRE_CACHE_PATH',default_value=None)
+        returned_cache_dir = check_existing_env_var('AFIRE_CACHE_PATH', default_value=None)
         LOG.debug('AFIRE_CACHE_PATH = {}'.format(returned_cache_dir))
         LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
         returned_cache_dir = create_dir(returned_cache_dir)
 
     # Creating cache dir from env var has failed, try to create in the current dir.
-    if returned_cache_dir is None: 
+    if returned_cache_dir is None:
         LOG.info('Creating cache dir in the the current dir...')
         current_dir = os.getcwd()
         returned_cache_dir = os.path.join(current_dir, 'afire_cache')
@@ -659,26 +680,24 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
     LOG.debug('Final returned_cache_dir = {}'.format(returned_cache_dir))
     return returned_cache_dir
 
+
 def clean_cache(cache_dir, cache_time_window, granule_dt):
     """
     Purge the cache of old files.
     """
 
-    anc_dir_pattern = '(?P<year>\d+)_(?P<month>\d+)_(?P<day>\d+)_(?P<jday>\d+)'
-    re_anc_dir_pattern = re.compile(anc_dir_pattern)
-
     # GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc
     anc_file_pattern = ['(?P<kind>[A-Z]+)_',
-            '(?P<sat>[A-Za-z0-9]+)_','d(?P<date>\d+)_',
-            't(?P<start_time>\d+)_',
-            'e(?P<end_time>\d+)_',
-            'b(?P<orbit>\d+)_',
-            '(?P<site>[a-zA-Z0-9]+)_',
-            '(?P<domain>[a-zA-Z0-9]+)\.nc']
+                        '(?P<sat>[A-Za-z0-9]+)_', 'd(?P<date>\d+)_',
+                        't(?P<start_time>\d+)_',
+                        'e(?P<end_time>\d+)_',
+                        'b(?P<orbit>\d+)_',
+                        '(?P<site>[a-zA-Z0-9]+)_',
+                        '(?P<domain>[a-zA-Z0-9]+)\.nc']
     anc_file_pattern = "".join(anc_file_pattern)
     re_anc_file_pattern = re.compile(anc_file_pattern)
 
-    afire_anc_dirs = glob(os.path.join(cache_dir,'*_*_*_*-*h'))
+    afire_anc_dirs = glob(os.path.join(cache_dir, '*_*_*_*-*h'))
     afire_anc_dirs.sort()
     #LOG.debug('afire_anc_dirs: {} :'.format(afire_anc_dirs))
 
@@ -689,13 +708,13 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
 
         LOG.debug('afire_anc_dir: {}'.format(afire_anc_dir))
 
-        afire_nc_files = glob(os.path.join(afire_anc_dir,'GRLWM_*.nc'))
+        afire_nc_files = glob(os.path.join(afire_anc_dir, 'GRLWM_*.nc'))
         afire_nc_files.sort()
         if afire_nc_files != []:
             LOG.debug('In {} :'.format(afire_anc_dir))
-            LOG.debug('\t{0}'.format(
-                ", ".join(["{}".format(os.path.basename(x)) for x in afire_nc_files])
-                ))
+            LOG.debug(
+                '\t{0}'.format(
+                    ", ".join(["{}".format(os.path.basename(x)) for x in afire_nc_files])))
 
         afire_date_pattern = '%Y%m%d_%H%M%S'
 
@@ -708,22 +727,24 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
             date_str = '{}_{}'.format(file_info['date'], file_info['start_time'])
             deciseconds = int(date_str[-1])
             date_str = date_str[:-1]
-            anc_file_dt = datetime.strptime(date_str,afire_date_pattern) \
-                    + timedelta(seconds=0.1*deciseconds)
+            anc_file_dt = datetime.strptime(date_str, afire_date_pattern) + \
+                timedelta(seconds=0.1 * deciseconds)
             LOG.debug('\tAncillary cache file has time = {0}'.format(anc_file_dt))
 
             time_diff = (granule_dt - anc_file_dt).total_seconds()
-            time_diff_hours = time_diff/3600.
+            time_diff_hours = time_diff / 3600.
             LOG.debug('\tTime between {0} and {1} is {2} seconds ({3} hours)'.format(
-                granule_dt,anc_file_dt,time_diff,time_diff_hours))
+                granule_dt, anc_file_dt, time_diff, time_diff_hours))
 
-            if time_diff < 0 :
-                LOG.debug('\tAncillary cache file {0} is in the future...'
-                        .format(os.path.basename(files)))
+            if time_diff < 0:
+                LOG.debug(
+                    '\tAncillary cache file {0} is in the future...'.format(
+                        os.path.basename(files)))
                 future_files.append(files)
             elif time_diff_hours > cache_time_window:
-                LOG.debug('\tAncillary cache file {0} is more than {1} hours older than target...'
-                        .format(os.path.basename(files),cache_time_window))
+                LOG.debug(
+                    '\tAncillary cache file {0} is more than {1} hours older than target...'.format(
+                        os.path.basename(files), cache_time_window))
                 too_old_files.append(files)
             else:
                 pass
@@ -738,5 +759,3 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
                 LOG.warn("Removal candidate {0} does not exist".format(too_old_file))
     else:
         LOG.info("No old files need to be removed from the ancillary cache {0}".format(cache_dir))
-
-

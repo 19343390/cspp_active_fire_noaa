@@ -3,7 +3,7 @@
 """
 __init__.py
 
- * DESCRIPTION: 
+ * DESCRIPTION:
 
 Created by Geoff Cureton on 2017-02-11.
 Copyright (c) 2017 University of Wisconsin Regents.

@@ -13,37 +13,39 @@ Licensed under GNU GPLv3.
 
 import os
 import sys
-import re
-import string
-import shutil
+#import re
+#import string
+#import shutil
 import logging
-import time
-import glob
-import numpy as np
+#import time
+#import glob
+#import numpy as np
 import traceback
-import time
-import datetime as dt
-from datetime import datetime, timedelta
+#import datetime as dt
+#from datetime import datetime, timedelta
 from cffi import FFI
-import fcntl
+#import fcntl
 
-ffi = FFI()
 from args import argument_parser
 from dispatcher import afire_dispatcher
 from active_fire_interface import generate_file_list, construct_cmd_invocations
-from utils import create_dir, setup_cache_dir, clean_cache, link_files, CsppEnvironment
+from utils import create_dir, setup_cache_dir, clean_cache, CsppEnvironment
 from utils import check_and_convert_path, check_and_convert_env_var, check_existing_env_var
 
 os.environ['TZ'] = 'UTC'
+ffi = FFI()
 
 LOG = logging.getLogger(__name__)
 
+
 def process_afire_inputs(afire_home, work_dir, afire_options):
     """
-    Take the obtained / created gvar inputs and remap to standard projection
+    Construct dictionaries of valid input files and options, manage the ancillary cache, granulate
+    the required ancillary data, and construct a series of command line invocations, which are then
+    executed, returning the return codes for each valid input.
     """
 
-    ret_val = 0
+    #ret_val = 0
 
     attempted_runs = []
     successful_runs = []
@@ -51,7 +53,7 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
     problem_runs = []
 
     # Create a list of dicts containing valid inputs
-    afire_data_dict =  generate_file_list(afire_options['inputs'], afire_options)
+    afire_data_dict = generate_file_list(afire_options['inputs'], afire_options)
     granule_id_list = afire_data_dict.keys()
     granule_id_list.sort()
 
@@ -64,16 +66,14 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
     label_format_str = '{:^20s}{:^30s}'
     LOG.info(label_format_str.format("<Granule ID>", "<Granule Start Time>"))
     for granule_id in granule_id_list:
-        LOG.info(label_format_str.format(
-            granule_id,
-            str(afire_data_dict[granule_id]['GMTCO']['dt'])
-            )
-        )
+        LOG.info(label_format_str.format(granule_id,
+                                         str(afire_data_dict[granule_id]['GMTCO']['dt'])))
 
     # Clean out product cache files that are too old.
     LOG.info('')
     if not afire_options['preserve_cache']:
-        LOG.info(">>> Cleaning the ancillary cache back {} hours...".format(afire_options['cache_window']))
+        LOG.info(">>> Cleaning the ancillary cache back {} hours...".format(
+            afire_options['cache_window']))
         first_dt = afire_data_dict[granule_id_list[0]]['GMTCO']['dt']
         clean_cache(afire_options['cache_dir'], afire_options['cache_window'], first_dt)
 
@@ -100,10 +100,10 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
         if rc_problem_dict[granule_id] != 0:
             problem_runs.append(granule_id)
 
-    attempted_runs  = list(set(attempted_runs))
+    attempted_runs = list(set(attempted_runs))
     successful_runs = list(set(successful_runs))
-    crashed_runs    = list(set(crashed_runs))
-    problem_runs    = list(set(problem_runs))
+    crashed_runs = list(set(crashed_runs))
+    problem_runs = list(set(problem_runs))
 
     attempted_runs.sort()
     successful_runs.sort()
@@ -112,9 +112,10 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
 
     return attempted_runs, successful_runs, crashed_runs, problem_runs
 
+
 def main():
     """
-    The main method, which checks envoronment vars and collects all of the required input options.
+    The main method, which checks environment vars and collects all of the required input options.
     Returns 0 on success
     """
 
@@ -126,15 +127,15 @@ def main():
 
         _, afire_home = check_and_convert_env_var('CSPP_ACTIVE_FIRE_HOME')
         _, afire_ancil_path = check_and_convert_env_var('AFIRE_ANCIL_PATH')
-        _ = check_and_convert_path(None, os.path.join(afire_home, 'static_ancillary'), check_write=False)
+        _ = check_and_convert_path(None, os.path.join(afire_home, 'static_ancillary'),
+                                   check_write=False)
         _ = check_and_convert_path(None, work_dir, check_write=False)
         ver = check_existing_env_var('NOAA_AFIRE_VER')
 
     except CsppEnvironment as e:
-        LOG.error( e.value )
+        LOG.error(e.value)
         LOG.error('Installation error, Make sure all software components were installed.')
         return 2
-
 
     afire_options = {}
     afire_options['inputs'] = args.inputs
@@ -142,7 +143,7 @@ def main():
     afire_options['work_dir'] = os.path.abspath(args.work_dir)
     afire_options['ancil_dir'] = afire_ancil_path
     afire_options['cache_dir'] = setup_cache_dir(args.cache_dir, afire_options['work_dir'],
-            'AFIRE_CACHE_PATH')
+                                                 'AFIRE_CACHE_PATH')
     afire_options['ancillary_only'] = args.ancillary_only
     afire_options['cache_window'] = args.cache_window
     afire_options['preserve_cache'] = args.preserve_cache
@@ -153,7 +154,7 @@ def main():
     try:
 
         attempted_runs, successful_runs, crashed_runs, problem_runs = process_afire_inputs(
-                afire_home, work_dir, afire_options)
+            afire_home, work_dir, afire_options)
 
         LOG.info('attempted_runs    {}'.format(attempted_runs))
         LOG.info('successful_runs   {}'.format(successful_runs))

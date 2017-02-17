@@ -6,7 +6,7 @@
 
 if [ -z "$CSPP_ACTIVE_FIRE_HOME" ]; then
     echo "CSPP_ACTIVE_FIRE_HOME must be set to the path where the CSPP software was installed."
-    echo "export CSPP_ACTIVE_FIRE_HOME=/home/me/cspp_active_fire_noaa"
+    echo "i.e.: export CSPP_ACTIVE_FIRE_HOME=/home/me/cspp_active_fire_noaa"
     exit 1
 fi
 

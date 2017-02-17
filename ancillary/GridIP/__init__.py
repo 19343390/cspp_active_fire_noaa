@@ -12,10 +12,9 @@ Copyright (c) 2013 University of Wisconsin SSEC. All rights reserved.
 
 import logging
 
-from LandWaterMask        import LandWaterMask
+from LandWaterMask import LandWaterMask
 
 LOG = logging.getLogger('__init__')
 
 classNames = {}
 classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'] = 'LandWaterMask'
-

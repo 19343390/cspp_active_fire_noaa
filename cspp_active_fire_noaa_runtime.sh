@@ -11,7 +11,6 @@ export PY=${CSPP_ACTIVE_FIRE_HOME}/vendor/ShellB3/bin/python
 
 # common modules location used by CSPP scripts
 export PYTHONPATH=${CSPP_ACTIVE_FIRE_HOME}/scripts
-#export PYTHONPATH=${CSPP_ACTIVE_FIRE_HOME}/common:${CSPP_ACTIVE_FIRE_HOME}/scripts
 
 export PATH=${PYTHONPATH}:${PATH}
 
@@ -19,12 +18,6 @@ export PATH=${PYTHONPATH}:${PATH}
 export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/vendor/ShellB3/lib64
 export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/vendor/ShellB3/lib:${LD_LIBRARY_PATH}
 export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/vendor:${LD_LIBRARY_PATH}
-#export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/common/local/lib64:${LD_LIBRARY_PATH}
-
-#export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/common/ShellB3/lib64
-#export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/common/ShellB3/lib:${LD_LIBRARY_PATH}
-#export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/common:${LD_LIBRARY_PATH}
-#export LD_LIBRARY_PATH=${CSPP_ACTIVE_FIRE_HOME}/common/local/lib64:${LD_LIBRARY_PATH}
 
 export AFIRE_ANCIL_PATH=${CSPP_ACTIVE_FIRE_HOME}/static_ancillary
 
