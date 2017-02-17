@@ -31,7 +31,7 @@ ffi = FFI()
 from args import argument_parser
 from dispatcher import afire_dispatcher
 from active_fire_interface import generate_file_list, construct_cmd_invocations
-from utils import  setup_cache_dir, clean_cache, link_files, CsppEnvironment
+from utils import create_dir, setup_cache_dir, clean_cache, link_files, CsppEnvironment
 from utils import check_and_convert_path, check_and_convert_env_var, check_existing_env_var
 
 os.environ['TZ'] = 'UTC'
@@ -76,6 +76,14 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
         LOG.info(">>> Cleaning the ancillary cache back {} hours...".format(afire_options['cache_window']))
         first_dt = afire_data_dict[granule_id_list[0]]['GMTCO']['dt']
         clean_cache(afire_options['cache_dir'], afire_options['cache_window'], first_dt)
+
+    # Create the required cache dirs
+    for granule_id in granule_id_list:
+        anc_dir = afire_data_dict[granule_id]['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
+        lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
+        lwm_dir = create_dir(lwm_dir)
+        if lwm_dir is None:
+            LOG.warn("Unable to create cache dir {} for granule {}".format(lwm_dir, granule_id))
 
     # Run the dispatcher
     rc_exe_dict, rc_problem_dict = afire_dispatcher(afire_home, afire_data_dict, afire_options)

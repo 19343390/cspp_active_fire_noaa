@@ -77,8 +77,9 @@ class LandWaterMask() :
             # Get scan_mode to find any bad scans
             scanMode = geo_file_obj['/All_Data/VIIRS-MOD-GEO-TC_All/ModeScan'][:]
             badScanIdx = np.where(scanMode==254)[0]
-            if badScanIdx != []:
+            if badScanIdx.size != 0:
                 LOG.warning("Geolocation file {} has bad scans: {}".format(geo_filename, badScanIdx))
+                LOG.debug("Geolocation file {} has scans: {}".format(geo_filename, scanMode))
 
 
             # Detemine the min, max and range of the latitude and longitude, 
@@ -416,9 +417,13 @@ class LandWaterMask() :
             longitude_obj = file_obj['Longitude'] 
             longitude_obj[:] = self.longitude[:].astype('float32')
             
-            # Get the Land Water Mask
+            # Get the Land Water Mask.
+            # Scans associated with missing geolocation are set to "Deep Ocean", because the AF code
+            # can't handle the LWM being set to it's actual missing value of -128. Sad! 
             lwm_obj = file_obj['LandMask']
-            lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask, fill_value=-128).filled()
+            #lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask, fill_value=-128).filled()
+            lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask,
+                    fill_value=self.DEM_dict['DEM_DEEP_OCEAN']).filled()
 
             # Set some global attributes
             setattr(file_obj,'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))

@@ -67,10 +67,10 @@ def cleanup(work_dir, objs_to_remove):
     for file_obj in objs_to_remove:
         try:
             if os.path.isdir(file_obj) :
-                LOG.info('Removing directory: {}'.format(file_obj))
+                LOG.debug('Removing directory: {}'.format(file_obj))
                 shutil.rmtree(file_obj)
             elif os.path.isfile(file_obj) :
-                LOG.info('Removing file: {}'.format(file_obj))
+                LOG.debug('Removing file: {}'.format(file_obj))
                 os.unlink(file_obj)
         except Exception:
             LOG.warn(traceback.format_exc())
@@ -615,7 +615,7 @@ def create_dir(dir):
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except OSError:
-        LOG.debug("Unable to create new dir '{}' in {}".format(returned_dir_base,returned_cache_path))
+        LOG.debug("Unable to create new dir '{}' in {}".format(returned_dir_base, returned_dir_path))
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except Exception:

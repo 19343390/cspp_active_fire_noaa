@@ -28,9 +28,7 @@ from datetime import datetime
 import log_common
 from utils import link_files, execution_time, execute_binary_captured_inject_io, cleanup
 
-#import ancillary
 from ancillary import get_lwm
-#from ancillary import GridIP
 
 LOG = logging.getLogger('dispatcher')
 
@@ -41,111 +39,126 @@ def afire_submitter(args):
     and returns return values and output logging from the external process.
     '''
 
-    granule_dict = args['granule_dict']
-    afire_home = args['afire_home']
-    afire_options = args['afire_options']
+    # This try block wraps all code in this worker function, to capture any exceptions.
+    try:
 
-    granule_id = granule_dict['granule_id']
-    run_dir = granule_dict['run_dir']
-    cmd = granule_dict['cmd']
-    work_dir = afire_options['work_dir']
-    env_vars = {}
+        granule_dict = args['granule_dict']
+        afire_home = args['afire_home']
+        afire_options = args['afire_options']
 
-    rc_exe = 0
-    rc_problem = 0
-    exe_out = "Finished the Active Fires granule {}".format(granule_id)
+        granule_id = granule_dict['granule_id']
+        run_dir = granule_dict['run_dir']
+        cmd = granule_dict['cmd']
+        work_dir = afire_options['work_dir']
+        env_vars = {}
 
-    LOG.debug("granule_id = {}".format(granule_id))
-    LOG.debug("run_dir = {}".format(run_dir))
-    LOG.debug("cmd = {}".format(cmd))
-    LOG.debug("work_dir = {}".format(work_dir))
-    LOG.debug("env_vars = {}".format(env_vars))
+        rc_exe = 0
+        rc_problem = 0
+        exe_out = "Finished the Active Fires granule {}".format(granule_id)
 
-    current_dir = os.getcwd()
+        LOG.debug("granule_id = {}".format(granule_id))
+        LOG.debug("run_dir = {}".format(run_dir))
+        LOG.debug("cmd = {}".format(cmd))
+        LOG.debug("work_dir = {}".format(work_dir))
+        LOG.debug("env_vars = {}".format(env_vars))
 
-    # Create the run dir for this input file
-    log_idx = 0
-    while True:
-        run_dir = os.path.join(work_dir,"{}_run_{}".format(granule_dict['run_dir'],log_idx))
-        if not os.path.exists(run_dir):
-            os.makedirs(run_dir)
-            break
-        else:
-            log_idx += 1
+        current_dir = os.getcwd()
 
-    os.chdir(run_dir)
+        # Create the run dir for this input file
+        log_idx = 0
+        while True:
+            run_dir = os.path.join(work_dir,"{}_run_{}".format(granule_dict['run_dir'],log_idx))
+            if not os.path.exists(run_dir):
+                os.makedirs(run_dir)
+                break
+            else:
+                log_idx += 1
 
-    # Download and stage the required ancillary data for this input file
-    LOG.info("Staging the required ancillary data for granule_id {}...".format(granule_id))
-    rc_ancil, lwm_file = get_lwm(afire_options, granule_dict)
+        os.chdir(run_dir)
 
-    # Run the active fire binary
-    if rc_ancil != 0 or lwm_file is None :
-        LOG.warn('Ancillary retrieval failed for granule_id {}'.format(granule_id))
-        os.chdir(current_dir)
-        rc_problem = 1
-    else:
-        # Link the required files and directories into the work directory...
-        paths_to_link = [
-            os.path.join(afire_home,'vendor/vfire_static'),
-            lwm_file,
-        ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
-        number_linked = link_files(run_dir, paths_to_link)
-
-        # Contruct a dictionary of error conditions which should be logged.
-        error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
-                      'ERROR', 'error', 'ERR', 'err',
-                      'ABORTING', 'aborting', 'ABORT','abort']
-        error_dict = {x:{'pattern':x, 'count_only':False, 'count':0, 'max_count':None, 'log_str':''}
-                for x in error_keys}
-        error_dict['error_keys'] = error_keys
-
-        start_time = time.time()
-
-        rc_exe, exe_out = execute_binary_captured_inject_io(
-                run_dir, cmd, error_dict,
-                log_execution=False, log_stdout=False, log_stderr=False,
-                **env_vars)
-
-        end_time = time.time()
-
-        afire_time = execution_time(start_time, end_time)
-        LOG.debug("afire execution of {} took {:9.6f} seconds".format(granule_id, afire_time['delta']))
-        LOG.info("\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
-            .format(granule_id, afire_time['days'],afire_time['hours'],
-                afire_time['minutes'],afire_time['seconds']))
-
-        LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
-
-        os.chdir(current_dir)
-
-        # Write the afire output to a log file, and parse it to determine the output
-        creation_dt = datetime.utcnow()
-        timestamp = creation_dt.isoformat()
-        logname = "{}_{}.log".format(run_dir, timestamp)
-        log_dir = os.path.dirname(run_dir)
-        logpath = os.path.join(log_dir, logname)
-        logfile_obj = open(logpath,'w')
-        for line in exe_out.splitlines():
-            logfile_obj.write(line+"\n")
-        logfile_obj.close()
-
-        # Move the output file from the run_dir to the work_dir
-        old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
-        new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
-        new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
-        LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
+        # Download and stage the required ancillary data for this input file
+        LOG.info("Staging the required ancillary data for granule_id {}...".format(granule_id))
+        failed_ancillary = False
         try:
-            shutil.move(old_output_file, new_output_file)
-        except Exception:
-            rc_problem = 1
-            LOG.warning("Problem moving output file from {} to {}".format(
-                old_output_file, new_output_file))
-            LOG.debug(traceback.format_exc())
+            rc_ancil, rc_ancil_dict, lwm_file = get_lwm(afire_options, granule_dict)
+        except Exception, err :
+            failed_ancillary = True
+            LOG.warn('problem with get_lwm() for granule_id {}'.format(granule_id))
 
-    # If no problems, remove the run dir
-    if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
-            cleanup(work_dir, [run_dir])
+        # Run the active fire binary
+        if failed_ancillary:
+            LOG.warn('Ancillary retrieval failed for granule_id {}'.format(granule_id))
+            os.chdir(current_dir)
+            rc_problem = 1
+        else:
+            # Link the required files and directories into the work directory...
+            paths_to_link = [
+                os.path.join(afire_home,'vendor/vfire_static'),
+                lwm_file,
+            ] + [granule_dict[key]['file'] for key in ['GMTCO','SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']]
+            number_linked = link_files(run_dir, paths_to_link)
+
+            # Contruct a dictionary of error conditions which should be logged.
+            error_keys = ['FAILURE', 'failure', 'FAILED', 'failed', 'FAIL', 'fail',
+                          'ERROR', 'error', 'ERR', 'err',
+                          'ABORTING', 'aborting', 'ABORT','abort']
+            error_dict = {x:{'pattern':x, 'count_only':False, 'count':0, 'max_count':None, 'log_str':''}
+                    for x in error_keys}
+            error_dict['error_keys'] = error_keys
+
+            start_time = time.time()
+
+            rc_exe, exe_out = execute_binary_captured_inject_io(
+                    run_dir, cmd, error_dict,
+                    log_execution=False, log_stdout=False, log_stderr=False,
+                    **env_vars)
+
+            end_time = time.time()
+
+            afire_time = execution_time(start_time, end_time)
+            LOG.debug("afire execution of {} took {:9.6f} seconds".format(granule_id, afire_time['delta']))
+            LOG.info("\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
+                .format(granule_id, afire_time['days'],afire_time['hours'],
+                    afire_time['minutes'],afire_time['seconds']))
+
+            LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
+
+            os.chdir(current_dir)
+
+            # Write the afire output to a log file, and parse it to determine the output
+            creation_dt = datetime.utcnow()
+            timestamp = creation_dt.isoformat()
+            logname = "{}_{}.log".format(run_dir, timestamp)
+            log_dir = os.path.dirname(run_dir)
+            logpath = os.path.join(log_dir, logname)
+            logfile_obj = open(logpath,'w')
+            for line in exe_out.splitlines():
+                logfile_obj.write(line+"\n")
+            logfile_obj.close()
+
+            # Move the output file from the run_dir to the work_dir
+            old_output_file = os.path.join(run_dir, granule_dict['AFIRE']['file'])
+            new_output_file = os.path.join(work_dir, granule_dict['AFIRE']['file'])
+            new_output_file = new_output_file.replace("CTIME", creation_dt.strftime("%Y%m%d%H%M%S%f"))
+            LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
+            try:
+                shutil.move(old_output_file, new_output_file)
+            except Exception:
+                rc_problem = 1
+                LOG.warning("Problem moving output file from {} to {}".format(
+                    old_output_file, new_output_file))
+                LOG.debug(traceback.format_exc())
+
+        # If no problems, remove the run dir
+        if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
+                cleanup(work_dir, [run_dir])
+
+
+    except Exception:
+        LOG.info(traceback.format_exc())
+        LOG.warn("General warning for  {}".format(lwm_lock_name))
+        os.chdir(current_dir)
+        raise
 
     return [granule_id, rc_exe, rc_problem, exe_out]
 
@@ -174,7 +187,7 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
 
     if requested_cpu_count is not None:
         LOG.info('We have requested {} {}'.format(requested_cpu_count,
-            "CPU" if len(requested_cpu_count) == 1 else "CPUs"))
+            "CPU" if requested_cpu_count == 1 else "CPUs"))
 
         if requested_cpu_count > cpu_count:
             LOG.warn('{} requested CPUs is greater than available, using {}'.format(
@@ -219,9 +232,6 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
         # Did the actual afire binary succeed?
         rc_exe_dict[granule_id] = afire_rc
         rc_problem_dict[granule_id] = problem_rc
-
-    # Boolean "and" the rc arrays, to get a final pass/fail for each segment...
-    LOG.debug("rc_exe_dict:     {}".format(rc_exe_dict))
 
     return rc_exe_dict, rc_problem_dict
 

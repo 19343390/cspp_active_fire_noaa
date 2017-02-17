@@ -13,13 +13,9 @@ Copyright (c) 2013 University of Wisconsin SSEC. All rights reserved.
 import logging
 
 from LandWaterMask        import LandWaterMask
-#from QuarterlySurfaceType import QuarterlySurfaceType
-#from QstLwm               import QstLwm
 
 LOG = logging.getLogger('__init__')
 
 classNames = {}
 classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran'] = 'LandWaterMask'
-#classNames['VIIRS-GridIP-VIIRS-Qst-Mod-Gran'] = 'QuarterlySurfaceType'
-#classNames['VIIRS-GridIP-VIIRS-Qst-Lwm-Mod-Gran'] = 'QstLwm'
 
