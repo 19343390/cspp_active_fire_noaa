@@ -14,15 +14,10 @@ Licensed under GNU GPLv3.
 """
 
 import os
-#import sys
 import re
-#import string
-#import shutil
 import logging
-#import time
 from glob import glob
 import numpy as np
-#import traceback
 from datetime import datetime
 
 LOG = logging.getLogger('active_file_interface')
@@ -355,9 +350,17 @@ def construct_cmd_invocations(afire_data_dict):
         )
         afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
             afire_data_dict[granule_id]['cmd'])
-        #afire_data_dict[granule_id]['cmd'] = 'sleep 0.5; echo "Executing {0:}"; exit 0'.format(granule_id)
-        #afire_data_dict[granule_id]['cmd'] = 'sleep 1; echo "Executing {}"; exit 0'.format(granule_id)
-        #afire_data_dict[granule_id]['cmd'] = 'echo "Executing {0:}..."; python -c "import numpy as np; import time; t = 0.5 * np.random.randn() + 5.; time.sleep(t)"; echo "Completed {0:}"; exit 0'.format(granule_id)
+
+        #afire_data_dict[granule_id]['cmd'] = 'sleep 0.5; echo "Executing {0:}"; exit 0'.format(
+            #granule_id)
+        #afire_data_dict[granule_id]['cmd'] = 'sleep 1; echo "Executing {}"; exit 0'.format(
+            #granule_id)
+        #afire_data_dict[granule_id]['cmd'] = ''.join(['echo "Executing {0:}...";',
+                                                      #'python -c "import numpy as np; import time;',
+                                                      #'t = 0.5 * np.random.randn() + 5.;',
+                                                      #'time.sleep(t)";',
+                                                      #'echo "Completed {0:}"; exit 0']).format(
+                                                          #granule_id)
 
         # Construct the run directory name
         afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFEDR_d{}_t{}_e{}_b{}_{}'.format(

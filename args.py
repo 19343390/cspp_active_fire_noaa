@@ -130,7 +130,7 @@ def argument_parser():
 
     parser.add_argument('-V', '--version',
                         action='version',
-                        version='''CSPP Active Fires v1.0beta''',
+                        version='''CSPP Active Fires v1.0-rc1''',
                         help=help_strings['version']
                         )
 

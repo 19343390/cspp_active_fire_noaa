@@ -26,7 +26,6 @@ import shutil
 from copy import copy
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime, timedelta
-#import threading
 from threading import Thread
 from Queue import Queue, Empty
 

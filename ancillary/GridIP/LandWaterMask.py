@@ -7,37 +7,23 @@ LandWaterMask.py
 
 Created by Geoff Cureton on 2013-03-05.
 Copyright (c) 2013 University of Wisconsin SSEC. All rights reserved.
+Licensed under GNU GPLv3.
 """
 
-#import os
-#import sys
 import logging
-#import traceback
 from os import path
-#import string
-#import re
-#import uuid
-#from glob import glob
 from time import time
 from datetime import datetime
-
-#from scipy import round_
-
 import numpy as np
 from numpy import ma
-#from bisect import bisect_left, bisect_right
-
 import ctypes
 from numpy.ctypeslib import ndpointer
 
 import h5py
 from netCDF4 import Dataset
-#from netCDF4 import num2date
 
 from Utils import findDatelineCrossings
 from Utils import index, find_lt, find_gt
-#from Utils import Datafile_HDF5, Satellite_NetCDF
-#from Utils import plotArr
 
 LOG = logging.getLogger('LandWaterMask')
 

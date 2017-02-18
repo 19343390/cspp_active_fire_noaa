@@ -7,39 +7,16 @@ Various methods that are used by other methods in the ANC module.
 
 Created by Geoff Cureton on 2013-03-04.
 Copyright (c) 2013 University of Wisconsin SSEC. All rights reserved.
+Licensed under GNU GPLv3.
 """
 
-file_Date = '$Date$'
-file_Revision = '$Revision$'
-file_Author = '$Author$'
-file_HeadURL = '$HeadURL$'
-file_Id = '$Id$'
-
-__author__ = 'G.P. Cureton <geoff.cureton@ssec.wisc.edu>'
-__version__ = '$Id$'
-__docformat__ = 'Epytext'
-
-import os, sys, logging, traceback
-from os import path,uname,environ
+import logging
 import string
-import uuid
-from datetime import datetime,timedelta
-
-from subprocess import CalledProcessError
-
 import numpy as np
-from bisect import bisect_left,bisect_right
-
-from netCDF4 import Dataset
-from netCDF4 import num2date
-import h5py
+from bisect import bisect_left, bisect_right
 
 # every module should have a LOG object
-try :
-    sourcename= file_Id.split(" ")
-    LOG = logging.getLogger(sourcename[1])
-except :
-    LOG = logging.getLogger('Utils')
+LOG = logging.getLogger('Utils')
 
 
 def index(a, x):
@@ -54,7 +31,7 @@ def find_lt(a, x):
     '''Find rightmost value less than x'''
     i = bisect_left(a, x)
     if i:
-        return a[i-1]
+        return a[i - 1]
     raise ValueError
 
 
@@ -62,7 +39,7 @@ def find_le(a, x):
     '''Find rightmost value less than or equal to x'''
     i = bisect_right(a, x)
     if i:
-        return a[i-1]
+        return a[i - 1]
     raise ValueError
 
 
@@ -82,162 +59,58 @@ def find_ge(a, x):
     raise ValueError
 
 
-def getURID() :
+def findDatelineCrossings(latCrnList, lonCrnList):
     '''
-    Create a new URID to be used in making the asc filenames
+    Finds the places where the boundary points that will make up a polygon
+    cross the dateline.
+
+    This method is heavily based on the AltNN NNfind_crossings() method
+
+    NOTE:  This loop will find the place(s) where the boundary crosses 180
+    degrees longitude.  It will also record the index after the crossing
+    for the first two crossings.
+
+    NOTE:  Since the last point in the boundary is equal to the first point
+    in the boundary, there is no chance of a crossing between the last
+    and first points.
+
+    initialize the number of crossings to zero
+    for loop over the boundary
+       if the longitudes cross the 180 degree line, then
+          increment the number of crossings
+          if this is first crossing, then
+             save the index after the crossing
+          else if this is the second crossing
+             save the index after the second crossing
+          endif
+       endif
+    end for loop
     '''
-    
-    URID_dict = {}
-
-    URID_timeObj = datetime.utcnow()
-    
-    creationDateStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.%f")
-    creationDate_nousecStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.000000")
-    
-    tv_sec = int(URID_timeObj.strftime("%s"))
-    tv_usec = int(URID_timeObj.strftime("%f"))
-    hostId_ = uuid.getnode()
-    thisAddress = id(URID_timeObj)
-    
-    l = tv_sec + tv_usec + hostId_ + thisAddress
-    
-    URID = '-'.join( ('{0:08x}'.format(tv_sec)[:8],
-                      '{0:05x}'.format(tv_usec)[:5],
-                      '{0:08x}'.format(hostId_)[:8],
-                      '{0:08x}'.format(l)[:8]) )
-    
-    URID_dict['creationDateStr'] = creationDateStr
-    URID_dict['creationDate_nousecStr'] = creationDate_nousecStr
-    URID_dict['tv_sec'] = tv_sec
-    URID_dict['tv_usec'] = tv_usec
-    URID_dict['hostId_'] = hostId_
-    URID_dict['thisAddress'] = thisAddress
-    URID_dict['URID'] = URID
-    
-    return URID_dict
-
-
-def check_exe(exeName):
-    ''' Check that a required executable is in the path...'''
-    try:
-        retVal = sh(['which',exeName])
-        LOG.info("{} is in the PATH...".format(exeName))
-    except CalledProcessError:
-        LOG.error("Required executable {} is not in the path or is not installed, aborting.".format(exeName))
-        sys.exit(1)
-
-
-def getAscLine(fileObj,searchString):
-    ''' Parses a file and searches for a string in each line, returning 
-        the line if the string is found.'''
-
-    dataStr = ''
-    try :
-        while True :
-            line = fileObj.readline()
-
-            if searchString in line : 
-                dataStr = "%s" % (string.replace(line,'\n',''));
-                break
-
-        fileObj.seek(0)
-
-    except Exception, err:
-        LOG.error('Exception: %r' % (err))
-        fileObj.close()
-
-    return dataStr
-
-
-def getAscStructs(fileObj,searchString,linesOfContext):
-    ''' Parses a file and searches for a string in each line, returning 
-        the line (and a given number of lines of context) if the string 
-        is found.'''
-
-    dataList = []
-    data_count = 0
-    dataFound = False
-
-    try :
-        while True :
-            line = fileObj.readline()
-
-            if searchString in line : 
-                dataFound = True
-
-            if dataFound :
-                dataStr = "%s" % (string.replace(line,'\n',''));
-                dataList.append(dataStr)
-                data_count += 1
-            else :
-                pass
-
-            if (data_count == linesOfContext) :
-                break
-
-        fileObj.seek(0)
-
-    except Exception, err:
-        LOG.error('Exception: %r' % (err))
-        fileObj.close()
-        return -1
-
-    dataStr=''
-    dataStr = "%s" % ("\n").join(['%s' % (str(lines)) for lines in dataList])
-
-    return dataStr
-
-
-def findDatelineCrossings(latCrnList,lonCrnList):
-    '''#----------------------------------------------------------------------------
-    # Finds the places where the boundary points that will make up a polygon
-    # cross the dateline.
-    #
-    # This method is heavily based on the AltNN NNfind_crossings() method
-    #
-    # NOTE:  This loop will find the place(s) where the boundary crosses 180
-    # degrees longitude.  It will also record the index after the crossing
-    # for the first two crossings.
-    # 
-    # NOTE:  Since the last point in the boundary is equal to the first point
-    # in the boundary, there is no chance of a crossing between the last
-    # and first points.
-    #
-    # initialize the number of crossings to zero
-    # for loop over the boundary
-    #    if the longitudes cross the 180 degree line, then
-    #       increment the number of crossings
-    #       if this is first crossing, then
-    #          save the index after the crossing
-    #       else if this is the second crossing
-    #          save the index after the second crossing
-    #       endif
-    #    endif
-    # end for loop
-    #-------------------------------------------------------------------------'''
 
     status = 0
     numCrosses = 0
+    cross1Idx_ = None
+    cross2Idx_ = None
 
     # For an ascending granule, the corner points are numbered [0,1,3,2], from the southeast
     # corner moving anti-clockwise.
 
-    LOG.debug("latCrnList = %r " % (latCrnList))
-    LOG.debug("lonCrnList = %r " % (lonCrnList))
+    LOG.debug("latCrnList = {}".format(latCrnList))
+    LOG.debug("lonCrnList = {}".format(lonCrnList))
 
-    for idx1,idx2 in zip([1,3,2],[0,1,3]):
-        
-        # Convert the longitudes to radians, and calculate the 
+    for idx1, idx2 in zip([1, 3, 2], [0, 1, 3]):
+
+        # Convert the longitudes to radians, and calculate the
         # absolute difference
         lon1 = np.radians(lonCrnList[idx1])
         lon2 = np.radians(lonCrnList[idx2])
-        lonDiff = np.fabs( lon1 - lon2 )
-        
-        if ( np.fabs(lonDiff) > np.pi ):
+        lonDiff = np.fabs(lon1 - lon2)
+
+        if (np.fabs(lonDiff) > np.pi):
 
             # We have a crossing, incrememnt the number of crossings
             numCrosses += 1
-            
+
             if(numCrosses == 1):
 
                 # This was the first crossing
@@ -248,10 +121,14 @@ def findDatelineCrossings(latCrnList,lonCrnList):
                 # This was the second crossing
                 cross2Idx_ = idx1
 
-            else :
+            else:
 
                 # we should never get here
-                return -1
+                status = -1
+                return status
+
+    LOG.debug("cross1Idx_ = {}".format(cross1Idx_))
+    LOG.debug("cross2Idx_ = {}".format(cross2Idx_))
 
     num180Crossings_ = numCrosses
 
@@ -276,284 +153,8 @@ def findDatelineCrossings(latCrnList,lonCrnList):
 
     return num180Crossings_
 
-class Datafile_HDF5():
-    '''
-    An instantiation of this class provides access to the dataset and attributes
-    '''
 
-    def __init__(self,input_file):
-
-
-        self.input_file = input_file
-
-        if h5py.is_hdf5(self.input_file):
-            LOG.debug('Opening {} with HDF5...'.format(self.input_file))
-            self.file_obj = h5py.File(self.input_file,'r')
-        else:
-            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
-            sys.exit(1)
-
-        # Dictionary of file object attributes
-        self.attrs = {}
-        for attr_key in self.file_obj.attrs.keys():
-            self.attrs[attr_key] = self.file_obj.attrs[attr_key][0]
-            LOG.debug("file attrs[{}]  = {}".format(attr_key, self.attrs[attr_key]))
-
-        self.fill_val_keys = ['missing_value', '_FillValue']
-        self.fill_value = None
-        for fill_val_key in self.fill_val_keys:
-            if fill_val_key in  self.attrs.keys():
-                self.fill_value = self.attrs[fill_val_key]
-        LOG.debug("self.fill_value = {}".format(self.fill_value))
-
-        # Dictionary of dataset objects
-        self.data_dict = {}
-        for dset_obj in self.file_obj.values():
-            key = dset_obj.name
-            self.data_dict[key] = dset_obj
-
-        # List of dataset names
-        self.datanames = self.file_obj.keys()
-        self.datanames.sort()
-
-
-    class Dataset():
-
-        def __init__(selfd,dfile_obj,dataname):
-
-            selfd.dataname = dataname
-            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
-
-            selfd.dset_obj = dfile_obj.data_dict[dataname]
-
-            selfd.attrs = {}
-            for attr_key in selfd.dset_obj.attrs.keys():
-                selfd.attrs[attr_key] = selfd.dset_obj.attrs[attr_key][0]
-
-            if 'missing_value' in selfd.attrs.keys():
-                selfd.dset = ma.masked_equal(selfd.dset_obj[:], float(selfd.attrs['missing_value']))
-            else:
-                selfd.dset = selfd.dset_obj[:]
-
-    def close(self):
-        LOG.debug('Closing {}...'.format(self.input_file))
-        self.file_obj.close()
-
-class Datafile_NetCDF():
-    '''
-    An instantiation of this class provides access to the dataset and attributes
-    '''
-
-    def __init__(self,input_file):
-
-        self.input_file = input_file
-
-        if os.path.exists(self.input_file):
-            LOG.debug('Opening {} with NetCDF...'.format(self.input_file))
-            self.file_obj = Dataset(self.input_file)
-        else:
-            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
-            sys.exit(1)
-
-        # The file object dimensions
-        self.dimensions = {}
-        for key in self.file_obj.dimensions.keys():
-            self.dimensions[key] = len(self.file_obj.dimensions[key])
-            LOG.debug("dimension {} = {}".format(key,self.dimensions[key]))
-
-        # Dictionary of file object attributes
-        self.attrs = {}
-        for attr_key in self.file_obj.ncattrs():
-            self.attrs[attr_key] = getattr(self.file_obj,attr_key)
-            LOG.debug("file attrs[{}]  = {}".format(attr_key, self.attrs[attr_key]))
-
-        self.fill_val_keys = ['missing_value', '_FillValue']
-        self.fill_value = None
-        for fill_val_key in self.fill_val_keys:
-            if fill_val_key in  self.attrs.keys():
-                self.fill_value = self.attrs[fill_val_key]
-        LOG.debug("self.fill_value = {}".format(self.fill_value))
-
-        # Ordered dictionary of dataset objects
-        self.data_dict = self.file_obj.variables
-
-        # List of dataset names
-        self.datanames = self.data_dict.keys()
-        self.datanames.sort()
-
-
-    class Dataset():
-
-        def __init__(selfd,L1_obj,dataname):
-
-            selfd.dataname = dataname
-            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
-
-            selfd.dset_obj = L1_obj.file_obj.variables[dataname]
-
-            selfd.attrs = {}
-            for attr_key in selfd.dset_obj.ncattrs():
-                selfd.attrs[attr_key] = getattr(selfd.dset_obj,attr_key)
-
-            if '_FillValue' in selfd.attrs.keys():
-                selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
-            else:
-                selfd.dset = selfd.dset_obj[:]
-
-    def close(self):
-        LOG.debug('Closing {}...'.format(self.input_file))
-        self.file_obj.close()
-
-class Satellite_NetCDF():
-    '''
-    An instantiation of this class provides access to the dataset and attributes
-    '''
-
-    def __init__(self,input_file):
-
-        self.input_file = input_file
-
-        if os.path.exists(self.input_file):
-            LOG.debug('Opening {} with Satellite_NetCDF...'.format(self.input_file))
-            self.file_obj = Dataset(self.input_file)
-        else:
-            LOG.error('Input file {} does not exist, aborting...'.format(self.input_file))
-            sys.exit(1)
-
-        # Dictionary of file object attributes
-        self.attrs = {}
-        for attr_key in self.file_obj.ncattrs():
-            self.attrs[attr_key] = getattr(self.file_obj,attr_key)
-
-        # Ordered dictionary of dataset objects
-        self.data_dict = self.file_obj.variables
-
-        # List of dataset names
-        self.datanames = self.data_dict.keys()
-        self.datanames.sort()
-
-    class Dataset():
-
-        def __init__(selfd,L1_obj,dataname,data=True):
-
-            selfd.dataname = dataname
-            LOG.debug("selfd.dataname = {}".format(selfd.dataname))
-
-            selfd.dset_obj = L1_obj.file_obj.variables[dataname]
-
-            selfd.attrs = {}
-            for attr_key in selfd.dset_obj.ncattrs():
-                selfd.attrs[attr_key] = getattr(selfd.dset_obj,attr_key)
-
-            LOG.debug("data = {}".format(data))
-            if data:
-                selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
-
-            #selfd.dset = ma.masked_equal(selfd.dset_obj[:],selfd.attrs['_FillValue'])
-
-    def close_file(self):
-        LOG.debug('Closing {}...'.format(self.input_file))
-        self.file_obj.close()
-
-def shipOutToFile(GridIPobj):
-    '''
-    Generate a blob/asc file pair from the input ancillary data object.
-    '''
-
-    # Set some environment variables and paths
-    ANC_SCRIPTS_PATH = path.join(CSPP_RT_HOME,'viirs')
-    ADL_ASC_TEMPLATES = path.join(ANC_SCRIPTS_PATH,'asc_templates')
-
-    # Create new GridIP ancillary blob, and copy granulated data to it
-
-    endian = GridIPobj.ancEndian
-    if endian is adl_blob.LITTLE_ENDIAN :
-        endianString = "LE"
-    else :
-        endianString = "BE"
-
-    xmlName = path.join(ADL_HOME,'xml/VIIRS',GridIPobj.xmlName)
-
-    # Create a new URID to be used in making the asc filenames
-
-    URID_dict = getURID()
-
-    URID = URID_dict['URID']
-    creationDate_nousecStr = URID_dict['creationDate_nousecStr']
-    creationDateStr = URID_dict['creationDateStr']
-
-    # Create a new directory in the input directory for the new ancillary
-    # asc and blob files
-
-    blobDir = GridIPobj.inDir
-
-    ascFileName = path.join(blobDir,URID+'.asc')
-    blobName = path.join(blobDir,URID+'.'+GridIPobj.collectionShortName)
-
-    LOG.debug("ascFileName : %s" % (ascFileName))
-    LOG.debug("blobName : %s" % (blobName))
-
-    # Create a new ancillary blob, and copy the data to it.
-    newGridIPblobObj = adl_blob.create(xmlName, blobName, endian=endian, overwrite=True)
-
-    # TODO: This should be a loop, so we can cycle through any data and 
-    #       quality flag arrays.
-    blobData = getattr(newGridIPblobObj,GridIPobj.blobDatasetName)
-    blobData[:,:] = GridIPobj.data[:,:]
-
-    # Make a new GridIP asc file from the template, and substitute for the various tags
-
-    ascTemplateFileName = path.join(ADL_ASC_TEMPLATES,"VIIRS-GridIP-VIIRS_Template.asc")
-
-    LOG.debug("Creating new asc file\n%s\nfrom template\n%s" % (ascFileName,ascTemplateFileName))
-    
-    ANC_fileList = GridIPobj.sourceList
-    for idx in range(len(ANC_fileList)) :
-        ANC_fileList[idx] = path.basename(ANC_fileList[idx])
-    ANC_fileList.sort()
-    ancGroupRecipe = '    ("N_Anc_Filename" STRING EQ "%s")'
-    ancFileStr = "%s" % ("\n").join([ancGroupRecipe % (str(files)) for files in ANC_fileList])
-
-    LOG.debug("RangeDateTimeStr = %s\n" % (GridIPobj.RangeDateTimeStr))
-    LOG.debug("GRingLatitudeStr = \n%s\n" % (GridIPobj.GRingLatitudeStr))
-    LOG.debug("GRingLongitudeStr = \n%s\n" % (GridIPobj.GRingLongitudeStr))
-
-    try:
-        ascTemplateFile = open(ascTemplateFileName,"rt") # Open template file for reading
-        ascFile = open(ascFileName,"wt") # create a new text file
-    except Exception, err :
-        LOG.error("%s, aborting." % (err))
-        sys.exit(1)
-
-    LOG.debug("Template file %s is %r with mode %s" %(ascTemplateFileName,'not open' if ascTemplateFile.closed else 'open',ascTemplateFile.mode))
-
-    LOG.debug("New file %s is %r with mode %s" %(ascFileName,'not open' if ascFile.closed else 'open',ascFile.mode))
-
-    for line in ascTemplateFile.readlines():
-       line = line.replace("CSPP_URID",URID)
-       line = line.replace("CSPP_CREATIONDATETIME_NOUSEC",creationDate_nousecStr)
-       line = line.replace("CSPP_ANC_BLOB_FULLPATH",path.basename(blobName))
-       line = line.replace("CSPP_ANC_COLLECTION_SHORT_NAME",GridIPobj.collectionShortName)
-       line = line.replace("CSPP_GRANULE_ID",GridIPobj.geoDict['N_Granule_ID'])
-       line = line.replace("CSPP_CREATIONDATETIME",creationDateStr)
-       line = line.replace("  CSPP_RANGE_DATE_TIME",GridIPobj.RangeDateTimeStr)
-       line = line.replace("  CSPP_GRINGLATITUDE",GridIPobj.GRingLatitudeStr)
-       line = line.replace("  CSPP_GRINGLONGITUDE",GridIPobj.GRingLongitudeStr)
-       line = line.replace("CSPP_NORTH_BOUNDING_COORD",GridIPobj.North_Bounding_Coordinate_Str)
-       line = line.replace("CSPP_SOUTH_BOUNDING_COORD",GridIPobj.South_Bounding_Coordinate_Str)
-       line = line.replace("CSPP_EAST_BOUNDING_COORD",GridIPobj.East_Bounding_Coordinate_Str)
-       line = line.replace("CSPP_WEST_BOUNDING_COORD",GridIPobj.West_Bounding_Coordinate_Str)
-       line = line.replace("CSPP_ANC_ENDIANNESS",endianString)       
-       #line = line.replace("    CSPP_ANC_SOURCE_FILES",ancFileStr)
-       ascFile.write(line) 
-
-    ascFile.close()
-    ascTemplateFile.close()
-
-    return URID
-
-
-def plotArr(data,pngName,vmin=None,vmax=None):
+def plotArr(data, pngName, vmin=None, vmax=None):
     '''
     Plot the input array, with a colourbar.
     '''
@@ -572,45 +173,42 @@ def plotArr(data,pngName,vmin=None,vmax=None):
 
     LOG.info("Plotting a GridIP dataset {}".format(pngName))
 
-    plotTitle =  string.replace(pngName,".png","")
-    cbTitle   =  "Value"
+    plotTitle = string.replace(pngName, ".png", "")
+    cbTitle = "Value"
     #vmin,vmax =  0,1
 
-
     # Create figure with default size, and create canvas to draw on
-    scale=1.5
-    fig = Figure(figsize=(scale*8,scale*3))
+    scale = 1.5
+    fig = Figure(figsize=(scale * 8, scale * 3))
     canvas = FigureCanvas(fig)
 
     # Create main axes instance, leaving room for colorbar at bottom,
     # and also get the Bbox of the axes instance
-    ax_rect = [0.05, 0.18, 0.9, 0.75  ] # [left,bottom,width,height]
+    ax_rect = [0.05, 0.18, 0.9, 0.75]  # [left,bottom,width,height]
     ax = fig.add_axes(ax_rect)
 
     # Granule axis title
-    ax_title = ppl.setp(ax,title=plotTitle)
-    ppl.setp(ax_title,fontsize=12)
-    ppl.setp(ax_title,family="sans-serif")
+    ax_title = ppl.setp(ax, title=plotTitle)
+    ppl.setp(ax_title, fontsize=12)
+    ppl.setp(ax_title, family="sans-serif")
 
     # Plot the data
-    im = ax.imshow(data,axes=ax,interpolation='nearest',vmin=vmin,vmax=vmax)
-    
+    im = ax.imshow(data, axes=ax, interpolation='nearest', vmin=vmin, vmax=vmax)
+
     # add a colorbar axis
-    cax_rect = [0.05 , 0.05, 0.9 , 0.10 ] # [left,bottom,width,height]
-    cax = fig.add_axes(cax_rect,frameon=False) # setup colorbar axes
+    cax_rect = [0.05, 0.05, 0.9, 0.10]  # [left,bottom,width,height]
+    cax = fig.add_axes(cax_rect, frameon=False)  # setup colorbar axes
 
     # Plot the colorbar.
     cb = fig.colorbar(im, cax=cax, orientation='horizontal')
-    ppl.setp(cax.get_xticklabels(),fontsize=9)
+    ppl.setp(cax.get_xticklabels(), fontsize=9)
 
     # Colourbar title
-    cax_title = ppl.setp(cax,title=cbTitle)
-    ppl.setp(cax_title,fontsize=9)
+    cax_title = ppl.setp(cax, title=cbTitle)
+    ppl.setp(cax_title, fontsize=9)
 
     # Redraw the figure
     canvas.draw()
 
-    # save image 
-    canvas.print_figure(pngName,dpi=200)
-
-
+    # save image
+    canvas.print_figure(pngName, dpi=200)

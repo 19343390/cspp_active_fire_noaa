@@ -11,24 +11,11 @@ Licensed under GNU GPLv3.
 """
 
 import os
-#import string
-#import sys
 import logging
-#import time
-#import types
-#import fileinput
 import shutil
 import traceback
 import fcntl
-#from subprocess import Popen, CalledProcessError, call, PIPE
-#from datetime import datetime
 
-#import netCDF4
-#from netCDF4 import Dataset, Variable
-#from netCDF4 import num2date
-
-#import log_common
-#from utils import link_files, create_dir, execution_time, execute_binary_captured_inject_io
 from utils import create_dir
 
 import GridIP

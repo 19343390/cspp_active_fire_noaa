@@ -2,12 +2,6 @@
 # Gridding and granulation Ctypes compilation #
 ###############################################
 
-#  file_Date = $Date$
-#  file_Revision = $Revision$
-#  file_Author = $Author$
-#  file_HeadURL = $HeadURL$
-#  file_Id = $Id$
-
 # Statically linked
 gcc -c -fPIC griddingAndGranulation.c
 ar rcs libgriddingAndGranulation.a griddingAndGranulation.o
@@ -21,4 +15,3 @@ gcc -shared -O0 -Wl,-soname,libgriddingAndGranulation.so.1 -lm -o libgriddingAnd
 # Dynamically linked, more optimisation
 gcc -c -fPIC -O3 griddingAndGranulation.c -o griddingAndGranulation.o
 gcc -shared -O3 -Wl,-soname,libgriddingAndGranulation.so.1 -lm -o libgriddingAndGranulation.so.1.0.1 griddingAndGranulation.o
-

@@ -1,9 +1,4 @@
-/*  file_Date = $Date$
- *  file_Revision = $Revision$
- *  file_Author = $Author$
- *  file_HeadURL = $HeadURL$
- *  file_Id = $Id$
- *
+/*
  *  ________________________
  *  griddingAndGranulation.c
  *  ________________________
@@ -13,6 +8,7 @@
  *
  *  Created by Geoff Cureton on 2011-06-27.
  *  Copyright (c) 2011 University of Wisconsin SSEC. All rights reserved.
+ *  Licensed under GNU GPLv3.
  *
  */
 

@@ -13,21 +13,15 @@ Licensed under GNU GPLv3.
 """
 
 import os
-#import string
-#import sys
 import logging
 import time
-#import types
-#import fileinput
 import shutil
 import traceback
-#from subprocess import Popen, CalledProcessError, call, PIPE
 import multiprocessing
 from datetime import datetime
 
 from netCDF4 import Dataset
 
-#import log_common
 from utils import link_files, execution_time, execute_binary_captured_inject_io, cleanup
 
 from ancillary import get_lwm

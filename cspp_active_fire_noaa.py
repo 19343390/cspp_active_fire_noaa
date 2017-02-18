@@ -13,18 +13,9 @@ Licensed under GNU GPLv3.
 
 import os
 import sys
-#import re
-#import string
-#import shutil
 import logging
-#import time
-#import glob
-#import numpy as np
 import traceback
-#import datetime as dt
-#from datetime import datetime, timedelta
 from cffi import FFI
-#import fcntl
 
 from args import argument_parser
 from dispatcher import afire_dispatcher

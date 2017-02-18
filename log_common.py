@@ -10,18 +10,11 @@ Copyright (c) 2011 University of Wisconsin Regents.
 Licensed under GNU GPLv3.
 """
 
-#import os
 import sys
 import logging
+from cffi import FFI
 
-#from utils import check_and_convert_path
-
-#import __main__
-
-#from cffi import FFI
-#ffi = FFI()
-
-ffi = None
+ffi = FFI()
 
 LOG = logging.getLogger(__name__)
 
