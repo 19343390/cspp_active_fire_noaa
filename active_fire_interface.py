@@ -20,6 +20,8 @@ from glob import glob
 import numpy as np
 from datetime import datetime
 
+import h5py
+
 LOG = logging.getLogger('active_file_interface')
 
 
@@ -41,7 +43,6 @@ def get_granule_ID(IET_StartTime):
     # Divide the elapsed time by the granule size to obtain the granule number;
     # the integer division will give the desired floor value.
     granuleNumber = int(np.floor(elapsedTime / granuleSize))
-    #granuleNumber = np.ceil(elapsedTime / granuleSize)
 
     # Multiply the granule number by the granule size, then add the spacecraft
     # base time to obtain the granule start boundary time. Add the granule
@@ -64,7 +65,7 @@ def get_granule_ID(IET_StartTime):
     return N_Granule_ID
 
 
-def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
+def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_file=False):
     '''
     Computes a datetime object from "filename" using the regex "pattern", and determines the
     elapsed time since "epoch".
@@ -85,9 +86,25 @@ def get_granule_id_from_filename(filename, pattern, epoch, leapsec_dt_list):
     LOG.debug("dt = {}".format(dt))
     leap_seconds = int(get_leapseconds(leapsec_dt_list, dt))
     LOG.debug("leap_seconds = {}".format(leap_seconds))
-    iet_time = int(((dt - epoch).total_seconds() + leap_seconds) * 1000000.)
-    LOG.debug("iet_time = {}".format(iet_time))
-    granule_id = get_granule_ID(iet_time)
+
+    if read_file:
+        try:
+            file_obj = h5py.File(filename, 'r')
+            grp_obj = file_obj['/Data_Products']
+            collection_short_name = grp_obj.keys()[0]
+            gran_group_name = '/Data_Products/{0:}/{0:}_Gran_0'.format(collection_short_name)
+            grp_obj = file_obj[gran_group_name]
+            iet_time = grp_obj.attrs['N_Beginning_Time_IET'][0][0]
+            granule_id = grp_obj.attrs['N_Granule_ID'][0][0]
+            file_obj.close()
+        except:
+            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
+            file_obj.close()
+            granule_id = None
+    else:
+        iet_time = int(((dt - epoch).total_seconds() + leap_seconds) * 1000000.)
+        LOG.debug("iet_time = {}".format(iet_time))
+        granule_id = get_granule_ID(iet_time)
 
     return granule_id, file_info, dt
 
@@ -142,7 +159,7 @@ def get_leapseconds(leapsec_table, dt):
 def generate_file_list(inputs, afire_options, full=False):
     '''
     Trawl through the files and directories given at the command line, pick out those matching the
-    desired file types, and att them to a master list of raw data files. This list need not be
+    desired file types, and attach them to a master list of raw data files. This list need not be
     sorted into time order.
     '''
 
@@ -198,6 +215,9 @@ def generate_file_list(inputs, afire_options, full=False):
     LOG.debug("Epoch time: {}".format(iet_epoch))
     leapsec_dt_list = get_leapsec_table(afire_options['ancil_dir'])
 
+    # Set the required granule ID scheme...
+    read_file = True
+
     # Loop through the input dirs and record any desired files in any of these directories
 
     data_dict = {}
@@ -212,8 +232,12 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for files in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str,
-                                                                         iet_epoch, leapsec_dt_list)
+                granule_id, file_info, dt = get_granule_id_from_file(files, RE_NPP_str,
+                                                                     iet_epoch, leapsec_dt_list,
+                                                                     read_file=read_file)
+
+                if granule_id is None:
+                    continue
 
                 LOG.debug("granule_id = {}".format(granule_id))
 
@@ -238,8 +262,11 @@ def generate_file_list(inputs, afire_options, full=False):
     for files in input_files:
         LOG.debug("input file: {}".format(files))
 
-        granule_id, _, _ = get_granule_id_from_filename(files, RE_NPP_str, iet_epoch,
-                                                        leapsec_dt_list)
+        granule_id, _, _ = get_granule_id_from_file(files, RE_NPP_str, iet_epoch,
+                                                    leapsec_dt_list, read_file=read_file)
+        if granule_id is None:
+            continue
+
         LOG.debug("granule_id = {}".format(granule_id))
         granule_id_from_files.append(granule_id)
 
@@ -281,8 +308,12 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for files in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_filename(files, RE_NPP_str,
-                                                                         iet_epoch, leapsec_dt_list)
+                granule_id, file_info, dt = get_granule_id_from_file(files, RE_NPP_str,
+                                                                     iet_epoch, leapsec_dt_list,
+                                                                     read_file=read_file)
+
+                if granule_id is None:
+                    continue
 
                 LOG.debug("granule_id = {}".format(granule_id))
 
