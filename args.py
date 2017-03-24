@@ -78,13 +78,13 @@ def argument_parser():
                         help=help_strings['work_dir']
                         )
 
-    parser.add_argument('--cache_dir',
+    parser.add_argument('--cache-dir',
                         dest='cache_dir',
                         #default='.',
                         help=help_strings['cache_dir']
                         )
 
-    parser.add_argument('--cache_window',
+    parser.add_argument('--cache-window',
                         dest='cache_window',
                         action="store",
                         type=float,
@@ -92,21 +92,21 @@ def argument_parser():
                         help=help_strings['cache_window'] if is_expert else argparse.SUPPRESS
                         )
 
-    parser.add_argument('--preserve_cache',
+    parser.add_argument('--preserve-cache',
                         dest='preserve_cache',
                         action="store_true",
                         default=False,
                         help=help_strings['preserve_cache'] if is_expert else argparse.SUPPRESS
                         )
 
-    parser.add_argument('--ancillary_only',
+    parser.add_argument('--ancillary-only',
                         dest='ancillary_only',
                         action="store_true",
                         default=False,
                         help=help_strings['ancillary_only'] if is_expert else argparse.SUPPRESS
                         )
 
-    parser.add_argument('--num_cpu',
+    parser.add_argument('--num-cpu',
                         action="store",
                         dest="num_cpu",
                         type=int,
