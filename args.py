@@ -110,7 +110,7 @@ def argument_parser():
                         action="store",
                         dest="num_cpu",
                         type=int,
-                        #default=1,
+                        default=1,
                         metavar=('NUM_CPU'),
                         help=help_strings['num_cpu'] if is_expert else argparse.SUPPRESS
                         )
