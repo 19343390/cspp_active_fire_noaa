@@ -417,13 +417,9 @@ class LandWaterMask():
             longitude_obj[:] = self.longitude[:].astype('float32')
 
             # Get the Land Water Mask.
-            # Scans associated with missing geolocation are set to "Deep Ocean", because the AF code
-            # can't handle the LWM being set to it's actual missing value of -128. Sad!
             lwm_obj = file_obj['LandMask']
-            #lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask,
-                                    #fill_value=-128).filled()
             lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask,
-                                  fill_value=self.DEM_dict['DEM_DEEP_OCEAN']).filled()
+                                    fill_value=-128).filled()
 
             # Set some global attributes
             setattr(file_obj, 'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))
