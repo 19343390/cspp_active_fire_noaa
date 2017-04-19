@@ -339,7 +339,7 @@ def construct_cmd_invocations(afire_data_dict):
     form...
 
     vfire GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
-        GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc \
+        GRLWM_npp_d{}_t{}_e{}_b{}_cspp_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_cspp_dev.nc \
         metadata_id metadata_link time
     '''
 
@@ -349,7 +349,7 @@ def construct_cmd_invocations(afire_data_dict):
     for granule_id in granule_id_list:
 
         # Construct the land water mask filename
-        land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc'.format(
+        land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_cspp_dev.nc'.format(
             afire_data_dict[granule_id]['GMTCO']['date'],
             afire_data_dict[granule_id]['GMTCO']['start_time'],
             afire_data_dict[granule_id]['GMTCO']['end_time'],
@@ -358,7 +358,7 @@ def construct_cmd_invocations(afire_data_dict):
         afire_data_dict[granule_id]['GRLWM'] = {'file': land_water_mask}
 
         # Construct the output filename.
-        afire_output_file = 'AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_ssec_dev.nc'.format(
+        afire_output_file = 'AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_cspp_dev.nc'.format(
             afire_data_dict[granule_id]['GMTCO']['date'],
             afire_data_dict[granule_id]['GMTCO']['start_time'],
             afire_data_dict[granule_id]['GMTCO']['end_time'],
