@@ -117,7 +117,7 @@ def main():
     try:
 
         _, afire_home = check_and_convert_env_var('CSPP_ACTIVE_FIRE_HOME')
-        _, afire_ancil_path = check_and_convert_env_var('AFIRE_ANCIL_PATH')
+        _, afire_ancil_path = check_and_convert_env_var('CSPP_ACTIVE_FIRE_STATIC_DIR')
         _ = check_and_convert_path(None, os.path.join(afire_home, 'static_ancillary'),
                                    check_write=False)
         _ = check_and_convert_path(None, work_dir, check_write=False)
@@ -134,7 +134,7 @@ def main():
     afire_options['work_dir'] = os.path.abspath(args.work_dir)
     afire_options['ancil_dir'] = afire_ancil_path
     afire_options['cache_dir'] = setup_cache_dir(args.cache_dir, afire_options['work_dir'],
-                                                 'AFIRE_CACHE_PATH')
+                                                 'CSPP_ACTIVE_FIRE_CACHE_DIR')
     afire_options['ancillary_only'] = args.ancillary_only
     afire_options['cache_window'] = args.cache_window
     afire_options['preserve_cache'] = args.preserve_cache

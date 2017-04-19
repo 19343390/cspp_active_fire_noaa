@@ -28,21 +28,25 @@ def argument_parser():
     Method to encapsulate the option parsing and various setup tasks.
     '''
 
-    desc = """Run NOAA Active Fire algorithm on VIIRS SDR files."""
-
     help_strings = {}
     help_strings['inputs'] = '''One or more input files or directories.'''
     help_strings['work_dir'] = '''The work directory.'''
-    help_strings['cache_dir'] = '''The directory where the granulated land water mask files are kept.'''
-    help_strings['cache_window'] = '''Limit ancillary cache to hold no more that this number of hours
-            preceding the target time. [default: %(default)s hours]'''
-    help_strings['preserve_cache'] = '''Do not flush old files from the ancillary cache. [default: %(default)s]'''
-    help_strings['ancillary_only'] = '''Only process ancillary data, don't run Active Fires. [default: %(default)s]'''
-    help_strings['num_cpu'] = """The number of CPUs to try and use. [default: %(default)s]"""
+    help_strings['cache_dir'] = '''The directory where the granulated land water mask files are''' \
+            ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
+            ''' environment variable, otherwise defaults to "cspp_active_fire_cache_dir" in the''' \
+            ''' current directory.'''
+    help_strings['cache_window'] = '''Limit ancillary cache to hold no more that this number of''' \
+             ''' hours preceding\nthe target time. [default: %(default)s hours]'''
+    help_strings['preserve_cache'] = '''Do not flush old files from the ancillary cache.''' \
+            ''' [default: %(default)s]'''
+    help_strings['ancillary_only'] = '''Only process ancillary data, don't run Active Fires.''' \
+            ''' [default: %(default)s]'''
+    help_strings['num_cpu'] = '''The number of CPUs to try and use. [default: %(default)s]'''
     help_strings['debug'] = '''Always retain intermediate files. [default: %(default)s]'''
     help_strings['verbosity'] = '''each occurrence increases verbosity 1 level from
             ERROR: -v=WARNING -vv=INFO -vvv=DEBUG [default: %(default)s]'''
     help_strings['version'] = '''Print the CSPP Active Fires package version'''
+    help_strings['help'] = '''Show this help message and exit'''
     help_strings['expert'] = '''Display all help options, including the expert ones.'''
 
     is_expert = False
@@ -57,7 +61,16 @@ def argument_parser():
     else:
         pass
 
-    parser = argparse.ArgumentParser(description=desc)
+    #parser = argparse.ArgumentParser(description=desc)
+
+    # Initialise the parser.
+    desc = '''Run NOAA Active Fire algorithm on VIIRS SDR files.'''
+    epilog = ''
+    parser = argparse.ArgumentParser(description=desc,
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     add_help=False,
+                                     epilog=epilog
+                                     )
 
     # Mandatory/positional arguments
 
@@ -132,6 +145,11 @@ def argument_parser():
                         action='version',
                         version='''CSPP Active Fires v1.0-rc1''',
                         help=help_strings['version']
+                        )
+
+    parser.add_argument('-h', '--help',
+                        action="help",
+                        help=help_strings['help']
                         )
 
     parser.add_argument('-x', '--expert',

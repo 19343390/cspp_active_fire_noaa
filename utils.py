@@ -661,11 +661,11 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
         returned_cache_dir = copy(cache_dir)
         returned_cache_dir = create_dir(returned_cache_dir)
 
-    # Explicit setting of cache dir failed, falling back to AFIRE_CACHE_PATH...
+    # Explicit setting of cache dir failed, falling back to CSPP_ACTIVE_FIRE_CACHE_DIR...
     if returned_cache_dir is None:
-        LOG.info('Creating cache dir from AFIRE_CACHE_PATH...')
-        returned_cache_dir = check_existing_env_var('AFIRE_CACHE_PATH', default_value=None)
-        LOG.debug('AFIRE_CACHE_PATH = {}'.format(returned_cache_dir))
+        LOG.info('Creating cache dir from {}...'.format(cache_env_name))
+        returned_cache_dir = check_existing_env_var(cache_env_name, default_value=None)
+        LOG.debug('CSPP_ACTIVE_FIRE_CACHE_DIR = {}'.format(returned_cache_dir))
         LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
         returned_cache_dir = create_dir(returned_cache_dir)
 
@@ -673,7 +673,7 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
     if returned_cache_dir is None:
         LOG.info('Creating cache dir in the the current dir...')
         current_dir = os.getcwd()
-        returned_cache_dir = os.path.join(current_dir, 'afire_cache')
+        returned_cache_dir = os.path.join(current_dir, cache_env_name.lower())
         returned_cache_dir = create_dir(returned_cache_dir)
 
     LOG.debug('Final returned_cache_dir = {}'.format(returned_cache_dir))
