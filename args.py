@@ -33,7 +33,7 @@ def argument_parser():
     help_strings['work_dir'] = '''The work directory.'''
     help_strings['cache_dir'] = '''The directory where the granulated land water mask files are''' \
             ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
-            ''' environment variable, otherwise defaults to "cspp_active_fire_cache_dir" in the''' \
+            ''' environment variable, otherwise defaults to\n"cspp_active_fire_cache_dir" in the'''\
             ''' current directory.'''
     help_strings['cache_window'] = '''Limit ancillary cache to hold no more that this number of''' \
              ''' hours preceding\nthe target time. [default: %(default)s hours]'''
