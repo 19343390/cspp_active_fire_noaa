@@ -24,6 +24,7 @@ import types
 import fileinput
 import shutil
 from copy import copy
+import uuid
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime, timedelta
 from threading import Thread
@@ -93,6 +94,42 @@ class AscLineParser(object):
     def time_from_tokens(self, day, time):
         dt = datetime.strptime(day + time, '%Y-%m-%d%H:%M:%S.%f')
         return dt
+
+
+def getURID(URID_timeObj=None) :
+    '''
+    Create a new URID to be used in making the asc filenames
+    '''
+    
+    URID_dict = {}
+
+    if URID_timeObj is None:
+        URID_timeObj = datetime.utcnow()
+    
+    creationDateStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.%f")
+    creationDate_nousecStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.000000")
+    
+    tv_sec = int(URID_timeObj.strftime("%s"))
+    tv_usec = int(URID_timeObj.strftime("%f"))
+    hostId_ = uuid.getnode()
+    thisAddress = id(URID_timeObj)
+    
+    l = tv_sec + tv_usec + hostId_ + thisAddress
+    
+    URID = '-'.join( ('{0:08x}'.format(tv_sec)[:8],
+                      '{0:05x}'.format(tv_usec)[:5],
+                      '{0:08x}'.format(hostId_)[:8],
+                      '{0:08x}'.format(l)[:8]) )
+    
+    URID_dict['creationDateStr'] = creationDateStr
+    URID_dict['creationDate_nousecStr'] = creationDate_nousecStr
+    URID_dict['tv_sec'] = tv_sec
+    URID_dict['tv_usec'] = tv_usec
+    URID_dict['hostId_'] = hostId_
+    URID_dict['thisAddress'] = thisAddress
+    URID_dict['URID'] = URID
+    
+    return URID_dict
 
 
 def link_files(dest_path, files):

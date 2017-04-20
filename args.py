@@ -61,7 +61,7 @@ def argument_parser():
     else:
         pass
 
-    #parser = argparse.ArgumentParser(description=desc)
+    cspp_afire_version = 'cspp-active-fire-noaa_1.0rc2'
 
     # Initialise the parser.
     desc = '''Run NOAA Active Fire algorithm on VIIRS SDR files.'''
@@ -143,7 +143,7 @@ def argument_parser():
 
     parser.add_argument('-V', '--version',
                         action='version',
-                        version='''CSPP Active Fires v1.0-rc1''',
+                        version=cspp_afire_version,
                         help=help_strings['version']
                         )
 
@@ -160,6 +160,7 @@ def argument_parser():
                         )
 
     args = parser.parse_args()
+    print(args)
 
     # Set up the logging
     levels = [logging.ERROR, logging.WARN, logging.INFO, logging.DEBUG]
@@ -182,4 +183,4 @@ def argument_parser():
     if args.debug is True:
         docleanup = False
 
-    return args, work_dir, docleanup, logfile
+    return args, work_dir, docleanup, cspp_afire_version, logfile

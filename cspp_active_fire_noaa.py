@@ -111,7 +111,7 @@ def main():
     """
 
     # Read in the command line options
-    args, work_dir, docleanup, logfile = argument_parser()
+    args, work_dir, docleanup, cspp_afire_version, logfile = argument_parser()
 
     # Check various paths and environment variables that are "must haves".
     try:
@@ -140,6 +140,7 @@ def main():
     afire_options['preserve_cache'] = args.preserve_cache
     afire_options['num_cpu'] = args.num_cpu
     afire_options['docleanup'] = docleanup
+    afire_options['version'] = cspp_afire_version
 
     rc = 0
     try:

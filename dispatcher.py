@@ -22,7 +22,7 @@ from datetime import datetime
 
 from netCDF4 import Dataset
 
-from utils import link_files, execution_time, execute_binary_captured_inject_io, cleanup
+from utils import link_files, getURID, execution_time, execute_binary_captured_inject_io, cleanup
 
 from ancillary import get_lwm
 
@@ -156,12 +156,48 @@ def afire_submitter(args):
                     old_output_file, new_output_file))
                 LOG.debug(traceback.format_exc())
 
+            # Update the various file global attributes
             try:
                 file_obj = Dataset(new_output_file, "a", format="NETCDF4")
+
+                #
+                # Update the attributes, preserving order (currently hangs)
+                #
+                #global_attrs = {}
+                #for attr in file_obj.ncattrs():
+                    #LOG.info("Reading in global attribute {}".format(attr))
+                    #global_attrs[attr] = getattr(file_obj, attr)
+
+                #global_attrs['date_created'] = creation_dt.isoformat()
+                #global_attrs['granule_id'] = granule_dict['granule_id']
+                #global_attrs['history'] = '{}; CSPP Active Fires version: {}'.format(
+                        #global_attrs['history'],
+                        #afire_options['version'])
+                #global_attrs['Metadata_Link'] = os.path.basename(new_output_file)
+                #global_attrs['id'] = getURID(creation_dt)['URID']
+
+                #for attr in file_obj.ncattrs():
+                    #LOG.info("Writing out global attribute {}".format(attr))
+                    ##global_attrs[attr] = getattr(file_obj, attr)
+                    #setattr(file_obj, attr, global_attrs[attr])
+
+                #
+                # Update the attributes, moving to the end
+                #
                 setattr(file_obj, 'date_created', creation_dt.isoformat())
                 setattr(file_obj, 'granule_id', granule_dict['granule_id'])
+                LOG.info("History: {}".format(getattr(file_obj, 'history')))
+                history_string = '{}; CSPP Active Fires version: {}'.format(
+                        getattr(file_obj, 'history'),
+                        afire_options['version'])
+                setattr(file_obj, 'history', history_string)
+                setattr(file_obj, 'Metadata_Link', os.path.basename(new_output_file))
+                setattr(file_obj, 'id', getURID(creation_dt)['URID'])
+
                 file_obj.close()
+
             except Exception:
+                file_obj.close()
                 rc_problem = 1
                 LOG.warning("Problem setting attributes in output file {}".format(new_output_file))
                 LOG.debug(traceback.format_exc())
