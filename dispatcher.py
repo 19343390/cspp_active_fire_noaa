@@ -31,7 +31,7 @@ LOG = logging.getLogger('dispatcher')
 
 def afire_submitter(args):
     '''
-    This routine encapsulates the single unit of work, multiple instances which are submitted to
+    This routine encapsulates the single unit of work, multiple instances of which are submitted to
     the multiprocessing queue. It takes as input whatever is required to complete the work unit,
     and returns return values and output logging from the external process.
     '''
@@ -169,7 +169,7 @@ def afire_submitter(args):
                     #global_attrs[attr] = getattr(file_obj, attr)
 
                 #global_attrs['date_created'] = creation_dt.isoformat()
-                #global_attrs['granule_id'] = granule_dict['granule_id']
+                #global_attrs['granule_id'] = granule_id
                 #global_attrs['history'] = '{}; CSPP Active Fires version: {}'.format(
                         #global_attrs['history'],
                         #afire_options['version'])
@@ -185,8 +185,7 @@ def afire_submitter(args):
                 # Update the attributes, moving to the end
                 #
                 setattr(file_obj, 'date_created', creation_dt.isoformat())
-                setattr(file_obj, 'granule_id', granule_dict['granule_id'])
-                LOG.info("History: {}".format(getattr(file_obj, 'history')))
+                setattr(file_obj, 'granule_id', granule_id)
                 history_string = '{}; CSPP Active Fires version: {}'.format(
                         getattr(file_obj, 'history'),
                         afire_options['version'])

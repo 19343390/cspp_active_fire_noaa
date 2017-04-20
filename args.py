@@ -160,7 +160,6 @@ def argument_parser():
                         )
 
     args = parser.parse_args()
-    print(args)
 
     # Set up the logging
     levels = [logging.ERROR, logging.WARN, logging.INFO, logging.DEBUG]

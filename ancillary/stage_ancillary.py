@@ -34,49 +34,90 @@ def get_lwm(afire_options, granule_dict):
         # Construct the name of the land water mask template
         lwm_template_file = os.path.join(afire_options['ancil_dir'],
                                          'NPP_VIIRS_LAND_MASK_NASA_1KM.nc')
-        LOG.debug("LWM template file = {}".format(lwm_template_file))
+        LOG.debug("LWM template filename: {}".format(lwm_template_file))
 
-        # Create the required dir in the cache dir
+        # Check that the required cache dir already exists...
         anc_dir = granule_dict['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
         lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
         if not os.path.isdir(lwm_dir):
             return 1, rc_dict, None
 
-        # Copy the LWM template file to the cache LWM file for this geolocation
-        try:
-            lwm_file = os.path.join(lwm_dir, granule_dict['GRLWM']['file'])
-            LOG.debug("lwm_file = {}".format(lwm_file))
-            shutil.copyfile(lwm_template_file, lwm_file)
-        except Exception, err:
-            LOG.error("Unable to copy the LWM template file {} to the cache file {}, aborting."
-                      .format(lwm_template_file, lwm_file))
-            LOG.error(err)
-            rc_dict = {'geo': geo_rc, 'subset': subset_rc, 'granulate': granulate_rc,
-                       'shipout': shipout_rc}
-            return 1, rc_dict, None
+        # Construct the name of the output GRLWM file
+        lwm_file = os.path.join(lwm_dir, granule_dict['GRLWM']['file'])
+        LOG.debug("Candidate LWM filename: {}".format(lwm_file))
 
-        # Get the Land Water Mask object
-        className = GridIP.classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran']
-        LandWaterMask = getattr(GridIP, className)(granule_dict, afire_options)
+        lwm_required = False
 
-        # Get the geolocation
-        geo_rc = LandWaterMask.setGeolocationInfo()
+        # Check whether the GRLWM file exists...
+        if os.path.exists(lwm_file):
 
-        # Subset the gridded data for this ancillary object to cover the required lat/lon range.
-        subset_rc = LandWaterMask.subset()
+            LOG.debug("LWM file {} exists...".format(lwm_file))
 
-        # Granulate the gridded data in this ancillary object for the current granule...
-        granulate_rc = LandWaterMask.granulate()
+            if not os.path.isfile(lwm_file):
+                LOG.warning("{} is not a regular file, removing...".format(lwm_file))
+                os.remove(lwm_file)
+                lwm_required = True
+            else:
+                LOG.debug("{} is a regular file, checking size...".format(lwm_file))
+                min_lwm_size_mb = 20.
+                lwm_size = float(os.stat(lwm_file).st_size) / (1024. * 1024.)
+                LOG.debug("lwm_file {} has size {} Mb".format(lwm_file, lwm_size))
+                if lwm_size < min_lwm_size_mb:
+                    LOG.warning("Size of lwm_file {} < minimum of 20 Mb".format(lwm_file))
+                    os.remove(lwm_file)
+                    lwm_required = True
+        else:
+            LOG.debug("LWM file {} doesn't exist...".format(lwm_file))
+            lwm_required = True
 
-        # Write the new data to the LWM template file
-        shipout_rc = LandWaterMask.shipOutToFile(lwm_file)
+        LOG.debug("lwm_required =  {}".format(lwm_required))
+
+        # We need a new LWM file, create it
+        if lwm_required:
+
+            # Copy the LWM template file to the cache LWM file for this geolocation
+            try:
+                shutil.copyfile(lwm_template_file, lwm_file)
+            except Exception, err:
+                LOG.error("Unable to copy the LWM template file {} to the cache file {}, aborting."
+                          .format(lwm_template_file, lwm_file))
+                LOG.error(err)
+                rc_dict = {'geo': geo_rc, 'subset': subset_rc, 'granulate': granulate_rc,
+                           'shipout': shipout_rc}
+                return 1, rc_dict, None
+
+            # Get the Land Water Mask object
+            className = GridIP.classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran']
+            LandWaterMask = getattr(GridIP, className)(granule_dict, afire_options)
+
+            # Get the geolocation
+            geo_rc = LandWaterMask.setGeolocationInfo()
+
+            # Subset the gridded data for this ancillary object to cover the required lat/lon range.
+            subset_rc = LandWaterMask.subset()
+
+            # Granulate the gridded data in this ancillary object for the current granule...
+            granulate_rc = LandWaterMask.granulate()
+
+            # Write the new data to the LWM template file
+            shipout_rc = LandWaterMask.shipOutToFile(lwm_file, afire_options)
+
+            min_lwm_size_mb = 20.
+            lwm_size = float(os.stat(lwm_file).st_size) / (1024. * 1024.)
+            LOG.debug("lwm_file {} has size {} Mb".format(lwm_file, lwm_size))
+            if lwm_size < min_lwm_size_mb:
+                LOG.warning("Size of lwm_file {} < minimum of 20 Mb".format(lwm_file))
+                shipout_rc = 1
+
+        else:
+            geo_rc, subset_rc, granulate_rc, shipout_rc = 0, 0, 0, 0
 
         rc = int(bool(geo_rc) or bool(subset_rc) or bool(granulate_rc) or bool(shipout_rc))
         rc_dict = {'geo': geo_rc, 'subset': subset_rc, 'granulate': granulate_rc,
                    'shipout': shipout_rc}
 
     except Exception:
-        LOG.info(traceback.format_exc())
+        LOG.warn(traceback.format_exc())
         LOG.warn("General warning for  {}".format(granule_dict['granule_id']))
         raise
 

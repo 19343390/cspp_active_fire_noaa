@@ -392,7 +392,7 @@ class LandWaterMask():
 
         return 0
 
-    def shipOutToFile(self, lwm_file):
+    def shipOutToFile(self, lwm_file, afire_options):
         '''
         Pass the current class instance to this Utils method to generate
         a blob/asc file pair from the input ancillary data object.
@@ -425,7 +425,8 @@ class LandWaterMask():
             setattr(file_obj, 'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))
             setattr(file_obj, 'Image_Date', granule_dt.strftime("%Y%j"))
             setattr(file_obj, 'Image_Time', granule_dt.strftime("%H%M%S"))
-            setattr(file_obj, 'Source', 'dem30ARC, CSPP Active Fires EDR v1.0')
+            setattr(file_obj, 'Source', 'dem30ARC; CSPP Active Fires version: {}'.format(
+                afire_options['version']))
 
             # Close the file
             file_obj.close()
