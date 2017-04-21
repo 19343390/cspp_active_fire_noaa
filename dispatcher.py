@@ -61,6 +61,8 @@ def afire_submitter(args):
 
         current_dir = os.getcwd()
 
+        LOG.info("Processing granule_id {}...".format(granule_id))
+
         # Create the run dir for this input file
         log_idx = 0
         while True:
@@ -74,21 +76,33 @@ def afire_submitter(args):
         os.chdir(run_dir)
 
         # Download and stage the required ancillary data for this input file
-        LOG.info("Staging the required ancillary data for granule_id {}...".format(granule_id))
+        LOG.info("\tStaging the required ancillary data for granule_id {}...".format(granule_id))
         failed_ancillary = False
         try:
             rc_ancil, rc_ancil_dict, lwm_file = get_lwm(afire_options, granule_dict)
         except Exception, err:
             failed_ancillary = True
-            LOG.warn('problem with get_lwm() for granule_id {}'.format(granule_id))
-            LOG.debug(traceback.format_exc())
+            LOG.warn('\tProblem generating LWM for granule_id {}'.format(granule_id))
             LOG.error(err)
+            LOG.debug(traceback.format_exc())
 
         # Run the active fire binary
-        if failed_ancillary:
-            LOG.warn('Ancillary retrieval failed for granule_id {}'.format(granule_id))
+        if afire_options['ancillary_only']:
+
+            LOG.info('''\tAncillary only, skipping Active Fire execution for granule_id {}'''.format(
+                granule_id))
+            if failed_ancillary:
+                LOG.warn('\tAncillary granulation failed for granule_id {}'.format(granule_id))
+                rc_problem = 1
+
+            os.chdir(current_dir)
+
+        elif failed_ancillary:
+
+            LOG.warn('\tAncillary granulation failed for granule_id {}'.format(granule_id))
             os.chdir(current_dir)
             rc_problem = 1
+
         else:
             # Link the required files and directories into the work directory...
             paths_to_link = [
@@ -97,7 +111,7 @@ def afire_submitter(args):
             ] + [granule_dict[key]['file'] for key in ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13',
                                                        'SVM15', 'SVM16']]
             number_linked = link_files(run_dir, paths_to_link)
-            LOG.debug("We are linking {} files to the run dir:".format(number_linked))
+            LOG.debug("\tWe are linking {} files to the run dir:".format(number_linked))
             for linked_files in paths_to_link:
                 LOG.debug("\t{}".format(linked_files))
 
@@ -120,14 +134,14 @@ def afire_submitter(args):
             end_time = time.time()
 
             afire_time = execution_time(start_time, end_time)
-            LOG.debug("afire execution of {} took {:9.6f} seconds".format(
+            LOG.debug("\tafire execution of {} took {:9.6f} seconds".format(
                 granule_id, afire_time['delta']))
             LOG.info(
                 "\tafire execution of {} took {} days, {} hours, {} minutes, {:8.6f} seconds"
                 .format(granule_id, afire_time['days'], afire_time['hours'],
                         afire_time['minutes'], afire_time['seconds']))
 
-            LOG.debug(" Granule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
+            LOG.debug("\tGranule ID: {}, rc_exe = {}".format(granule_id, rc_exe))
 
             os.chdir(current_dir)
 
@@ -147,12 +161,12 @@ def afire_submitter(args):
             new_output_file = os.path.join(work_dir, granule_dict['AFEDR']['file'])
             new_output_file = new_output_file.replace("CTIME",
                                                       creation_dt.strftime("%Y%m%d%H%M%S%f"))
-            LOG.debug("Moving output file from {} to {}".format(old_output_file, new_output_file))
+            LOG.debug("\tMoving output file from {} to {}".format(old_output_file, new_output_file))
             try:
                 shutil.move(old_output_file, new_output_file)
             except Exception:
                 rc_problem = 1
-                LOG.warning("Problem moving output file from {} to {}".format(
+                LOG.warning("\tProblem moving output file from {} to {}".format(
                     old_output_file, new_output_file))
                 LOG.debug(traceback.format_exc())
 
@@ -198,7 +212,7 @@ def afire_submitter(args):
             except Exception:
                 file_obj.close()
                 rc_problem = 1
-                LOG.warning("Problem setting attributes in output file {}".format(new_output_file))
+                LOG.warning("\tProblem setting attributes in output file {}".format(new_output_file))
                 LOG.debug(traceback.format_exc())
 
         # If no problems, remove the run dir
@@ -206,8 +220,8 @@ def afire_submitter(args):
                 cleanup(work_dir, [run_dir])
 
     except Exception:
-        LOG.info(traceback.format_exc())
-        LOG.warn("General warning for  {}".format(granule_id))
+        LOG.warn("\tGeneral warning for {}".format(granule_id))
+        LOG.debug(traceback.format_exc())
         os.chdir(current_dir)
         raise
 
