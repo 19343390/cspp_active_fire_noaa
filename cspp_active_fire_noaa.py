@@ -91,7 +91,8 @@ def process_afire_inputs(work_dir, afire_options):
 
     # Unless directed not to, cleanup the unaggregated inputs dir
     if afire_options['docleanup']:
-            cleanup(work_dir, ['unaggregated_inputs'])
+        unagg_inputs_dir = os.path.join(work_dir,'unaggregated_inputs')
+        cleanup([unagg_inputs_dir])
 
     # Populate the diagnostic granule ID lists
     for granule_id in granule_id_list:

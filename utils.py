@@ -62,10 +62,9 @@ def _replaceAll(intputfile, searchExp, replaceExp):
     fileinput.close()
 
 
-def cleanup(work_dir, objs_to_remove):
+def cleanup(objs_to_remove):
     """
-    cleanup work directiory
-    remove evething except the products
+    cleanup directories / files
     """
     for file_obj in objs_to_remove:
         try:
@@ -76,7 +75,7 @@ def cleanup(work_dir, objs_to_remove):
                 LOG.debug('Removing file: {}'.format(file_obj))
                 os.unlink(file_obj)
         except Exception:
-            LOG.warn("Unable to create cache dir {} for granule {}".format(lwm_dir, granule_id))
+            LOG.warn("Unable to remove {}".format(file_obj))
             LOG.debug(traceback.format_exc())
 
 

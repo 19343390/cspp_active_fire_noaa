@@ -207,6 +207,61 @@ def afire_submitter(args):
                 setattr(file_obj, 'Metadata_Link', os.path.basename(new_output_file))
                 setattr(file_obj, 'id', getURID(creation_dt)['URID'])
 
+                #
+                # Check if there are any fire pixels, and write the associated fire data to
+                # a text file...
+                #
+                nfire = len(file_obj['Fire Pixels'].dimensions['nfire'])
+                LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
+
+                if nfire > 0:
+                    Along_scan_pixel_dim = 0.75
+                    Along_track_pixel_dim = 0.75
+                    fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
+                    fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_T13', 'FP_confidence',
+                            'FP_power']
+                    fire_data = []
+                    for dset in fire_datasets:
+                        fire_data.append(file_obj['Fire Pixels'].variables[dset][:])
+
+                    output_txt_file = '.'.join(new_output_file.split('.')[:-1])+'.txt'
+
+                    format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.2f}, {6:6.2f},''' \
+                            ''' {3:4d}, {4:13.8f}'''
+
+                    txt_file_header = \
+                            '''# Active Fires EDR\n''' \
+                            '''#\n''' \
+                            '''# source: {}\n''' \
+                            '''# version: {}\n''' \
+                            '''#\n''' \
+                            '''# column 1: latitude of fire pixel (degrees)\n''' \
+                            '''# column 2: longitude of fire pixel (degres)\n''' \
+                            '''# column 3: M13 brightness temperature of fire pixel (K)\n''' \
+                            '''# column 4: Along-scan fire pixel resolution (km)\n''' \
+                            '''# column 5: Along-track fire pixel resolution (km)\n''' \
+                            '''# column 6: detection confidence (%)\n''' \
+                            '''# column 7: fire radiative power (MW)\n''' \
+                            '''#\n# number of fire pixels: {}\n''' \
+                            '''#'''.format(os.path.basename(new_output_file), history_string, nfire)
+
+                    txt_file_obj = file(output_txt_file, 'w')
+
+                    try:
+                        txt_file_obj.write(txt_file_header + "\n")
+
+                        for  FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power in zip(*fire_data):
+                            fire_vars = [FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power]
+                            line = format_str.format(*(fire_vars + fire_pixel_res))
+                            txt_file_obj.write(line + "\n")
+
+                        txt_file_obj.close()
+                    except Exception:
+                        txt_file_obj.close()
+                        rc_problem = 1
+                        LOG.warning("\tProblem writing Active fire text file: {}".format(output_txt_file))
+                        LOG.warn(traceback.format_exc())
+
                 file_obj.close()
 
             except Exception:
@@ -217,7 +272,7 @@ def afire_submitter(args):
 
         # If no problems, remove the run dir
         if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
-                cleanup(work_dir, [run_dir])
+                cleanup([run_dir])
 
     except Exception:
         LOG.warn("\tGeneral warning for {}".format(granule_id))
