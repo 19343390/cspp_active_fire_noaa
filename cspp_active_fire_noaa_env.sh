@@ -9,5 +9,5 @@ if [ -z "${CSPP_ACTIVE_FIRE_HOME}" ]; then
     echo "i.e.: export CSPP_ACTIVE_FIRE_HOME=/home/me/cspp_active_fire_noaa"
     exit 1
 fi
-export PATH=${CSPP_ACTIVE_FIRE_HOME}/vendor/ShellB3/bin:${PATH}
-export PATH=${CSPP_ACTIVE_FIRE_HOME}/bin:${CSPP_ACTIVE_FIRE_HOME}/scripts:${PATH}
+export PATH=${PATH}:${CSPP_ACTIVE_FIRE_HOME}/vendor/ShellB3/bin
+export PATH=${PATH}:${CSPP_ACTIVE_FIRE_HOME}/bin:${CSPP_ACTIVE_FIRE_HOME}/scripts
