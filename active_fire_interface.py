@@ -14,13 +14,18 @@ Licensed under GNU GPLv3.
 """
 
 import os
-import re
 import logging
+import time
+import re
 from glob import glob
 import numpy as np
+import multiprocessing
+import traceback
 from datetime import datetime
-
 import h5py
+
+from unaggregate import find_aggregated, unaggregate_inputs
+from utils import create_dir, execution_time, execute_binary_captured_inject_io
 
 LOG = logging.getLogger('active_file_interface')
 
@@ -79,7 +84,7 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
     file_info = dict(re_pattern.match(file_basename).groupdict())
     LOG.debug("file_info = {}".format(file_info))
 
-    # Determine the granule ID.
+    # Determine the granule time info...
     dt_string = "{}_{}".format(file_info['date'], file_info['start_time'])
     LOG.debug("dt_string = {}".format(dt_string))
     dt = datetime.strptime(dt_string, "%Y%m%d_%H%M%S%f")
@@ -87,15 +92,27 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
     leap_seconds = int(get_leapseconds(leapsec_dt_list, dt))
     LOG.debug("leap_seconds = {}".format(leap_seconds))
 
+    is_aggregated = False
+
     if read_file:
         try:
+            # Open the file and get the collection short name
             file_obj = h5py.File(filename, 'r')
             grp_obj = file_obj['/Data_Products']
             collection_short_name = grp_obj.keys()[0]
+
+            # Determine whether this is an aggregated granule...
+            agg_group_name = '/Data_Products/{0:}/{0:}_Aggr'.format(collection_short_name)
+            grp_obj = file_obj[agg_group_name]
+            num_grans = grp_obj.attrs['AggregateNumberGranules'][0][0]
+            is_aggregated = True if num_grans > 1 else False
+
+            #
             gran_group_name = '/Data_Products/{0:}/{0:}_Gran_0'.format(collection_short_name)
             grp_obj = file_obj[gran_group_name]
             iet_time = grp_obj.attrs['N_Beginning_Time_IET'][0][0]
             granule_id = grp_obj.attrs['N_Granule_ID'][0][0]
+
             file_obj.close()
         except:
             LOG.error("Reading of iet/granule_id failed for {}".format(filename))
@@ -106,7 +123,9 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
         LOG.debug("iet_time = {}".format(iet_time))
         granule_id = get_granule_ID(iet_time)
 
-    return granule_id, file_info, dt
+    LOG.debug("is_aggregated = {}".format(is_aggregated))
+
+    return granule_id, file_info, dt, is_aggregated
 
 
 def get_leapsec_table(leapsecond_dir):
@@ -230,11 +249,10 @@ def generate_file_list(inputs, afire_options, full=False):
             temp_input_files.sort()
             LOG.debug("temp_input_files {}".format(temp_input_files))
 
-            for files in temp_input_files:
+            for temp_input_file in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_file(files, RE_NPP_str,
-                                                                     iet_epoch, leapsec_dt_list,
-                                                                     read_file=read_file)
+                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(temp_input_file,
+                        RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
 
                 if granule_id is None:
                     continue
@@ -250,20 +268,22 @@ def generate_file_list(inputs, afire_options, full=False):
                     data_dict[granule_id] = {}
                     data_dict[granule_id][kind_key] = file_info
 
-                data_dict[granule_id][kind_key]['file'] = files
+                data_dict[granule_id][kind_key]['file'] = temp_input_file
                 data_dict[granule_id][kind_key]['dt'] = dt
+                data_dict[granule_id][kind_key]['is_aggregated'] = is_aggregated
 
-    # Loop through the input files, determine their dirs, and sweep up of the files in those dirs
+    # Loop through the input files, determine their dirs, and sweep up the files in those dirs
     # that share granule ids with the command line inputs.
 
     # Get the granule ids of the files given in the input
     granule_id_from_files = []
 
-    for files in input_files:
-        LOG.debug("input file: {}".format(files))
+    for input_file in input_files:
+        LOG.debug("input file: {}".format(input_file))
 
-        granule_id, _, _ = get_granule_id_from_file(files, RE_NPP_str, iet_epoch,
-                                                    leapsec_dt_list, read_file=read_file)
+        granule_id, _, _, is_aggregated = get_granule_id_from_file(input_file,
+                RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
+
         if granule_id is None:
             continue
 
@@ -278,8 +298,8 @@ def generate_file_list(inputs, afire_options, full=False):
 
     # Loop through the input files and determine the dirs in which they are contained
     input_dirs_from_files = []
-    for files in input_files:
-        input_dirs_from_files.append(os.path.dirname(files))
+    for input_file in input_files:
+        input_dirs_from_files.append(os.path.dirname(input_file))
 
     input_dirs_from_files = list(set(input_dirs_from_files))
     input_dirs_from_files.sort()
@@ -306,11 +326,10 @@ def generate_file_list(inputs, afire_options, full=False):
             temp_input_files.sort()
             LOG.debug("temp_input_files {}".format(temp_input_files))
 
-            for files in temp_input_files:
+            for temp_input_file in temp_input_files:
 
-                granule_id, file_info, dt = get_granule_id_from_file(files, RE_NPP_str,
-                                                                     iet_epoch, leapsec_dt_list,
-                                                                     read_file=read_file)
+                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(temp_input_file,
+                        RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
 
                 if granule_id is None:
                     continue
@@ -327,10 +346,47 @@ def generate_file_list(inputs, afire_options, full=False):
                         data_dict[granule_id] = {}
                         data_dict[granule_id][kind_key] = file_info
 
-                    data_dict[granule_id][kind_key]['file'] = files
+                    data_dict[granule_id][kind_key]['file'] = temp_input_file
                     data_dict[granule_id][kind_key]['dt'] = dt
+                    data_dict[granule_id][kind_key]['is_aggregated'] = is_aggregated
 
     return data_dict
+
+
+def get_afire_inputs(inputs, afire_options):
+    '''
+    Take one or more inputs from the command line, and return a dictionary of inputs grouped by
+    granule ID.
+    '''
+
+    afire_home = afire_options['afire_home']
+
+    # Create a list of dicts containing valid inputs, which may include aggregated files
+    afire_data_dict = generate_file_list(inputs, afire_options)
+    granule_id_list = afire_data_dict.keys()
+    granule_id_list.sort()
+
+    # Find the aggregated files...
+    agg_input_files = find_aggregated(afire_data_dict)
+    granule_id_list = afire_data_dict.keys()
+    granule_id_list.sort()
+    LOG.debug('agg_input_files = {}'.format(agg_input_files))
+
+    if agg_input_files != []:
+
+        # Unaggregate the aggregated files, and return the directory where the unaggregated files are...
+        unagg_inputs_dir = unaggregate_inputs(afire_home, agg_input_files, afire_options)
+
+        afire_unagg_data_dict = generate_file_list([unagg_inputs_dir], afire_options)
+        granule_id_unagg_list = afire_unagg_data_dict.keys()
+        granule_id_unagg_list.sort()
+
+        # Combine the two data dicts...
+        afire_data_dict.update(afire_unagg_data_dict)
+        granule_id_list = afire_data_dict.keys()
+        granule_id_list.sort()
+
+    return afire_data_dict, granule_id_list
 
 
 def construct_cmd_invocations(afire_data_dict):

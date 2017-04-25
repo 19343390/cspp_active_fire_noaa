@@ -76,7 +76,8 @@ def cleanup(work_dir, objs_to_remove):
                 LOG.debug('Removing file: {}'.format(file_obj))
                 os.unlink(file_obj)
         except Exception:
-            LOG.warn(traceback.format_exc())
+            LOG.warn("Unable to create cache dir {} for granule {}".format(lwm_dir, granule_id))
+            LOG.debug(traceback.format_exc())
 
 
 class AscLineParser(object):
@@ -211,8 +212,8 @@ def check_existing_env_var(varname, default_value=None):
         if default_value is not None:
             value = default_value
         else:
-            LOG.error("{} is not set, please update environment and re-try".format(varname))
-            LOG.error("Environment variable missing. {}".format(varname))
+            LOG.warn("{} is not set, please update environment and re-try".format(varname))
+            LOG.warn("Environment variable missing. {}".format(varname))
             #sys.exit(9)
 
     return value

@@ -284,11 +284,12 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
         "Active Fire execution took {} days, {} hours, {} minutes, {:8.6f} seconds"
         .format(total_afire_time['days'], total_afire_time['hours'],
                 total_afire_time['minutes'], total_afire_time['seconds']))
+    LOG.info('')
 
     rc_exe_dict = {}
     rc_problem_dict = {}
 
-    # Loop through each of the Active Fire results and convert the hdf files to netcdf
+    # Loop through each of the Active Fire results collect error information
     for result in result_list:
         granule_id, afire_rc, problem_rc, exe_out = result
         LOG.debug(">>> granule_id {}: afire_rc = {}, problem_rc = {}".format(

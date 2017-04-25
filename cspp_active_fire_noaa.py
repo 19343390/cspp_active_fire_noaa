@@ -18,9 +18,10 @@ import traceback
 from cffi import FFI
 
 from args import argument_parser
+from unaggregate import find_aggregated, unaggregate_inputs
+from active_fire_interface import get_afire_inputs, generate_file_list, construct_cmd_invocations
 from dispatcher import afire_dispatcher
-from active_fire_interface import generate_file_list, construct_cmd_invocations
-from utils import create_dir, setup_cache_dir, clean_cache, CsppEnvironment
+from utils import create_dir, setup_cache_dir, clean_cache, cleanup, CsppEnvironment
 from utils import check_and_convert_path, check_and_convert_env_var, check_existing_env_var
 
 os.environ['TZ'] = 'UTC'
@@ -29,7 +30,8 @@ ffi = FFI()
 LOG = logging.getLogger(__name__)
 
 
-def process_afire_inputs(afire_home, work_dir, afire_options):
+#def process_afire_inputs(afire_home, work_dir, afire_options):
+def process_afire_inputs(work_dir, afire_options):
     """
     Construct dictionaries of valid input files and options, manage the ancillary cache, granulate
     the required ancillary data, and construct a series of command line invocations, which are then
@@ -37,18 +39,21 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
     """
 
     #ret_val = 0
+    afire_home = afire_options['afire_home']
 
     attempted_runs = []
     successful_runs = []
     crashed_runs = []
     problem_runs = []
 
-    # Create a list of dicts containing valid inputs
-    afire_data_dict = generate_file_list(afire_options['inputs'], afire_options)
-    granule_id_list = afire_data_dict.keys()
-    granule_id_list.sort()
+    LOG.info('')
+    LOG.info('>>> Preparing inputs')
+    LOG.info('')
 
-    # Create a dict containing the required command line invocations.
+    # Create a dictionary containing valid inputs and related metadata
+    afire_data_dict, granule_id_list = get_afire_inputs(afire_options['inputs'], afire_options)
+
+    # Add the required command line invocations to the input dict...
     afire_data_dict = construct_cmd_invocations(afire_data_dict)
 
     LOG.info('')
@@ -77,9 +82,16 @@ def process_afire_inputs(afire_home, work_dir, afire_options):
             LOG.warn("Unable to create cache dir {} for granule {}".format(lwm_dir, granule_id))
 
     # Run the dispatcher
+    LOG.info('')
+    LOG.info('>>> Running Active Fires')
+    LOG.info('')
     rc_exe_dict, rc_problem_dict = afire_dispatcher(afire_home, afire_data_dict, afire_options)
     LOG.debug("rc_exe_dict = {}".format(rc_exe_dict))
     LOG.debug("rc_problem_dict = {}".format(rc_problem_dict))
+
+    # Unless directed not to, cleanup the unaggregated inputs dir
+    if afire_options['docleanup']:
+            cleanup(work_dir, ['unaggregated_inputs'])
 
     # Populate the diagnostic granule ID lists
     for granule_id in granule_id_list:
@@ -146,7 +158,8 @@ def main():
     try:
 
         attempted_runs, successful_runs, crashed_runs, problem_runs = process_afire_inputs(
-            afire_home, work_dir, afire_options)
+            work_dir, afire_options)
+            #afire_home, work_dir, afire_options)
 
         LOG.info('attempted_runs    {}'.format(attempted_runs))
         LOG.info('successful_runs   {}'.format(successful_runs))
