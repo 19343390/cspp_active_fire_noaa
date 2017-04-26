@@ -80,6 +80,7 @@ def afire_submitter(args):
         failed_ancillary = False
         try:
             rc_ancil, rc_ancil_dict, lwm_file = get_lwm(afire_options, granule_dict)
+            failed_ancillary = True if rc_ancil != 0 else False
         except Exception, err:
             failed_ancillary = True
             LOG.warn('\tProblem generating LWM for granule_id {}'.format(granule_id))

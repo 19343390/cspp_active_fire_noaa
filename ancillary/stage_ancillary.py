@@ -40,6 +40,7 @@ def get_lwm(afire_options, granule_dict):
         anc_dir = granule_dict['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
         lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
         if not os.path.isdir(lwm_dir):
+            LOG.error("LWM dir {} is not considered a valid directory, aborting.".format(lwm_dir))
             return 1, rc_dict, None
 
         # Construct the name of the output GRLWM file

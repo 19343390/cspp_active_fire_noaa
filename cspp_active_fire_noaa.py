@@ -30,7 +30,6 @@ ffi = FFI()
 LOG = logging.getLogger(__name__)
 
 
-#def process_afire_inputs(afire_home, work_dir, afire_options):
 def process_afire_inputs(work_dir, afire_options):
     """
     Construct dictionaries of valid input files and options, manage the ancillary cache, granulate
@@ -98,7 +97,10 @@ def process_afire_inputs(work_dir, afire_options):
     for granule_id in granule_id_list:
         attempted_runs.append(granule_id)
         if rc_exe_dict[granule_id] == 0:
-            successful_runs.append(granule_id)
+            if rc_problem_dict[granule_id] == 0:
+                successful_runs.append(granule_id)
+            else:
+                pass
         else:
             crashed_runs.append(granule_id)
         if rc_problem_dict[granule_id] != 0:
@@ -160,7 +162,6 @@ def main():
 
         attempted_runs, successful_runs, crashed_runs, problem_runs = process_afire_inputs(
             work_dir, afire_options)
-            #afire_home, work_dir, afire_options)
 
         LOG.info('attempted_runs    {}'.format(attempted_runs))
         LOG.info('successful_runs   {}'.format(successful_runs))
