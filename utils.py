@@ -96,31 +96,31 @@ class AscLineParser(object):
         return dt
 
 
-def getURID(URID_timeObj=None) :
+def getURID(URID_timeObj=None):
     '''
     Create a new URID to be used in making the asc filenames
     '''
-    
+
     URID_dict = {}
 
     if URID_timeObj is None:
         URID_timeObj = datetime.utcnow()
-    
+
     creationDateStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.%f")
     creationDate_nousecStr = URID_timeObj.strftime("%Y-%m-%d %H:%M:%S.000000")
-    
+
     tv_sec = int(URID_timeObj.strftime("%s"))
     tv_usec = int(URID_timeObj.strftime("%f"))
     hostId_ = uuid.getnode()
     thisAddress = id(URID_timeObj)
-    
+
     l = tv_sec + tv_usec + hostId_ + thisAddress
-    
-    URID = '-'.join( ('{0:08x}'.format(tv_sec)[:8],
-                      '{0:05x}'.format(tv_usec)[:5],
-                      '{0:08x}'.format(hostId_)[:8],
-                      '{0:08x}'.format(l)[:8]) )
-    
+
+    URID = '-'.join(('{0:08x}'.format(tv_sec)[:8],
+                     '{0:05x}'.format(tv_usec)[:5],
+                     '{0:08x}'.format(hostId_)[:8],
+                     '{0:08x}'.format(l)[:8]))
+
     URID_dict['creationDateStr'] = creationDateStr
     URID_dict['creationDate_nousecStr'] = creationDate_nousecStr
     URID_dict['tv_sec'] = tv_sec
@@ -128,7 +128,7 @@ def getURID(URID_timeObj=None) :
     URID_dict['hostId_'] = hostId_
     URID_dict['thisAddress'] = thisAddress
     URID_dict['URID'] = URID
-    
+
     return URID_dict
 
 
@@ -463,8 +463,10 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
     # Flush the remaining content in the stdout and stderr streams
     while True:
         try:
-            output_stdout = nbsr_stdout.readline(0.01)  # 0.01 secs to let the shell output the result
-            output_stderr = nbsr_stderr.readline()  # 0.1 secs to let the shell output the result
+            # 0.01 secs to let the shell output the result
+            output_stdout = nbsr_stdout.readline(0.01)
+            # 0.1 secs to let the shell output the result
+            output_stderr = nbsr_stderr.readline()
 
             if output_stdout is not None or output_stderr is not None:
 
@@ -671,7 +673,8 @@ def create_dir(dir):
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except OSError:
-        LOG.debug("Unable to create new dir '{}' in {}".format(returned_dir_base, returned_dir_path))
+        LOG.debug("Unable to create new dir '{}' in {}".format(
+            returned_dir_base, returned_dir_path))
         LOG.debug(traceback.format_exc())
         returned_dir = None
     except Exception:

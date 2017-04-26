@@ -14,13 +14,9 @@ Licensed under GNU GPLv3.
 import os
 import logging
 import time
-import re
-from glob import glob
-import numpy as np
 import multiprocessing
 import traceback
 from datetime import datetime
-import h5py
 
 from utils import create_dir, link_files, execution_time, execute_binary_captured_inject_io
 
@@ -104,9 +100,9 @@ def nagg_submitter(args):
 
         cmd_dict = {}
         cmd_dict['GEO'] = '{} -S -g {} -n 1 -O cspp -D dev -d {} {}'.format(
-                nagg_exe, prefix, unagg_inputs_dir, agg_input_file)
+            nagg_exe, prefix, unagg_inputs_dir, agg_input_file)
         cmd_dict['SVM'] = '{} -t {} -S -g no -n 1 -O cspp -D dev -d {} {}'.format(
-                nagg_exe, prefix, unagg_inputs_dir, agg_input_file)
+            nagg_exe, prefix, unagg_inputs_dir, agg_input_file)
 
         if 'GMTCO' in os.path.basename(agg_input_file):
             cmd = cmd_dict['GEO']
@@ -146,7 +142,8 @@ def nagg_submitter(args):
 
             LOG.debug("\tnagg({}), rc_exe = {}".format(os.path.basename(agg_input_file), rc_exe))
         else:
-            exe_out = "Aggregated file {} cannot be unaggregated by nagg, unrecognized prefix {}.".format(prefix, os.path.basename(agg_input_file))
+            exe_out = '''Aggregated file {} cannot be unaggregated by nagg,''' \
+                ''' unrecognized prefix {}.'''.format(prefix, os.path.basename(agg_input_file))
             LOG.warn('\t' + exe_out)
 
         # Write the afire output to a log file, and parse it to determine the output
@@ -172,11 +169,11 @@ def nagg_submitter(args):
 
 def unaggregate_inputs(afire_home, agg_input_files, afire_options):
     '''
-    Create a dir for the unaggregated files in the work dir, and use nagg to unaggregate the 
+    Create a dir for the unaggregated files in the work dir, and use nagg to unaggregate the
     aggregated input files.
     '''
 
-    unagg_inputs_dir = os.path.join(afire_options['work_dir'],'unaggregated_inputs')
+    unagg_inputs_dir = os.path.join(afire_options['work_dir'], 'unaggregated_inputs')
     unagg_inputs_dir = create_dir(unagg_inputs_dir)
 
     # Construct a list of task dicts...
@@ -202,8 +199,8 @@ def unaggregate_inputs(afire_home, agg_input_files, afire_options):
     requested_cpu_count = afire_options['num_cpu']
 
     if requested_cpu_count is not None:
-        LOG.debug('We have requested {} {}'.format(requested_cpu_count,
-                                                  "CPU" if requested_cpu_count == 1 else "CPUs"))
+        LOG.debug('We have requested {} {}'.format(
+            requested_cpu_count, "CPU" if requested_cpu_count == 1 else "CPUs"))
 
         if requested_cpu_count > cpu_count:
             LOG.warn('{} requested CPUs is greater than available, using {}'.format(

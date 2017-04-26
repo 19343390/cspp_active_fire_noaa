@@ -18,11 +18,10 @@ import traceback
 from cffi import FFI
 
 from args import argument_parser
-from unaggregate import find_aggregated, unaggregate_inputs
-from active_fire_interface import get_afire_inputs, generate_file_list, construct_cmd_invocations
+from active_fire_interface import get_afire_inputs, construct_cmd_invocations
 from dispatcher import afire_dispatcher
 from utils import create_dir, setup_cache_dir, clean_cache, cleanup, CsppEnvironment
-from utils import check_and_convert_path, check_and_convert_env_var, check_existing_env_var
+from utils import check_and_convert_path, check_and_convert_env_var
 
 os.environ['TZ'] = 'UTC'
 ffi = FFI()
@@ -90,7 +89,7 @@ def process_afire_inputs(work_dir, afire_options):
 
     # Unless directed not to, cleanup the unaggregated inputs dir
     if afire_options['docleanup']:
-        unagg_inputs_dir = os.path.join(work_dir,'unaggregated_inputs')
+        unagg_inputs_dir = os.path.join(work_dir, 'unaggregated_inputs')
         cleanup([unagg_inputs_dir])
 
     # Populate the diagnostic granule ID lists
@@ -136,7 +135,6 @@ def main():
         _ = check_and_convert_path(None, os.path.join(afire_home, 'static_ancillary'),
                                    check_write=False)
         _ = check_and_convert_path(None, work_dir, check_write=False)
-        ver = check_existing_env_var('NOAA_AFIRE_VER')
 
     except CsppEnvironment as e:
         LOG.error(e.value)

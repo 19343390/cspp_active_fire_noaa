@@ -161,8 +161,6 @@ def plotArr(data, pngName, vmin=None, vmax=None):
 
     # Plotting stuff
     import matplotlib
-    import matplotlib.cm as cm
-    from matplotlib.colors import ListedColormap
     from matplotlib.figure import Figure
 
     matplotlib.use('Agg')

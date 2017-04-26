@@ -15,17 +15,14 @@ Licensed under GNU GPLv3.
 
 import os
 import logging
-import time
+#import time
 import re
 from glob import glob
 import numpy as np
-import multiprocessing
-import traceback
 from datetime import datetime
 import h5py
 
 from unaggregate import find_aggregated, unaggregate_inputs
-from utils import create_dir, execution_time, execute_binary_captured_inject_io
 
 LOG = logging.getLogger('active_file_interface')
 
@@ -251,8 +248,9 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for temp_input_file in temp_input_files:
 
-                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(temp_input_file,
-                        RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
+                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(
+                    temp_input_file, RE_NPP_str,
+                    iet_epoch, leapsec_dt_list, read_file=read_file)
 
                 if granule_id is None:
                     continue
@@ -281,8 +279,8 @@ def generate_file_list(inputs, afire_options, full=False):
     for input_file in input_files:
         LOG.debug("input file: {}".format(input_file))
 
-        granule_id, _, _, is_aggregated = get_granule_id_from_file(input_file,
-                RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
+        granule_id, _, _, is_aggregated = get_granule_id_from_file(
+            input_file, RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
 
         if granule_id is None:
             continue
@@ -328,8 +326,8 @@ def generate_file_list(inputs, afire_options, full=False):
 
             for temp_input_file in temp_input_files:
 
-                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(temp_input_file,
-                        RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
+                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(
+                    temp_input_file, RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
 
                 if granule_id is None:
                     continue
@@ -374,7 +372,8 @@ def get_afire_inputs(inputs, afire_options):
 
     if agg_input_files != []:
 
-        # Unaggregate the aggregated files, and return the directory where the unaggregated files are...
+        # Unaggregate the aggregated files, and return the directory where the unaggregated
+        # files are...
         unagg_inputs_dir = unaggregate_inputs(afire_home, agg_input_files, afire_options)
 
         afire_unagg_data_dict = generate_file_list([unagg_inputs_dir], afire_options)
@@ -443,11 +442,11 @@ def construct_cmd_invocations(afire_data_dict):
         #afire_data_dict[granule_id]['cmd'] = 'sleep 1; echo "Executing {}"; exit 0'.format(
             #granule_id)
         #afire_data_dict[granule_id]['cmd'] = ''.join(['echo "Executing {0:}...";',
-                                                      #'python -c "import numpy as np; import time;',
-                                                      #'t = 0.5 * np.random.randn() + 5.;',
-                                                      #'time.sleep(t)";',
-                                                      #'echo "Completed {0:}"; exit 0']).format(
-                                                          #granule_id)
+                                                #'python -c "import numpy as np; import time;',
+                                                #'t = 0.5 * np.random.randn() + 5.;',
+                                                #'time.sleep(t)";',
+                                                #'echo "Completed {0:}"; exit 0']).format(
+                                                #granule_id)
 
         # Construct the run directory name
         afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFEDR_d{}_t{}_e{}_b{}_{}'.format(

@@ -32,15 +32,15 @@ def argument_parser():
     help_strings['inputs'] = '''One or more input files or directories.'''
     help_strings['work_dir'] = '''The work directory.'''
     help_strings['cache_dir'] = '''The directory where the granulated land water mask files are''' \
-            ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
-            ''' environment variable, otherwise defaults to\n"cspp_active_fire_cache_dir" in the'''\
-            ''' current directory.'''
+        ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
+        ''' environment variable, otherwise defaults to\n"cspp_active_fire_cache_dir" in the'''\
+        ''' current directory.'''
     help_strings['cache_window'] = '''Limit ancillary cache to hold no more that this number of''' \
-             ''' hours preceding\nthe target time. [default: %(default)s hours]'''
+        ''' hours preceding\nthe target time. [default: %(default)s hours]'''
     help_strings['preserve_cache'] = '''Do not flush old files from the ancillary cache.''' \
-            ''' [default: %(default)s]'''
+        ''' [default: %(default)s]'''
     help_strings['ancillary_only'] = '''Only process ancillary data, don't run Active Fires.''' \
-            ''' [default: %(default)s]'''
+        ''' [default: %(default)s]'''
     help_strings['num_cpu'] = '''The number of CPUs to try and use. [default: %(default)s]'''
     help_strings['debug'] = '''Always retain intermediate files. [default: %(default)s]'''
     help_strings['verbosity'] = '''each occurrence increases verbosity 1 level from

@@ -419,7 +419,7 @@ class LandWaterMask():
             # Get the Land Water Mask.
             lwm_obj = file_obj['LandMask']
             lwm_obj[:] = ma.array(self.data[:].astype('int8'), mask=geo_mask,
-                                    fill_value=-128).filled()
+                                  fill_value=-128).filled()
 
             # Set some global attributes
             setattr(file_obj, 'History', datetime.utcnow().strftime("%a %b %d %H:%M:%S %Y UTC"))
