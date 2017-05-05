@@ -705,9 +705,11 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
     if returned_cache_dir is None:
         LOG.info('Creating cache dir from {}...'.format(cache_env_name))
         returned_cache_dir = check_existing_env_var(cache_env_name, default_value=None)
+        LOG.debug('{} = {}'.format(cache_env_name, returned_cache_dir))
         LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
+        current_dir = os.getcwd()
+        returned_cache_dir = os.path.join(current_dir, cache_env_name.lower())
         returned_cache_dir = os.path.abspath(os.path.expanduser(returned_cache_dir))
-        LOG.debug('CSPP_ACTIVE_FIRE_CACHE_DIR = {}'.format(returned_cache_dir))
         LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
         returned_cache_dir = create_dir(returned_cache_dir)
 
