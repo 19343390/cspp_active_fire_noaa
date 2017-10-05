@@ -61,7 +61,7 @@ def argument_parser():
     else:
         pass
 
-    cspp_afire_version = 'cspp-active-fire-noaa_1.0'
+    cspp_afire_version = 'cspp-active-fire-noaa_1.0.1'
 
     # Initialise the parser.
     desc = '''Run NOAA Active Fire algorithm on VIIRS SDR files.'''

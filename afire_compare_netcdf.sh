@@ -1,7 +1,7 @@
 #!/bin/bash
-# Bash front-end script for CSPP Active Fires python scripting
+# Bash front-end script for CSPP Active Fires python script for comparing netcdf files.
 #
-# Copyright 2016, University of Wisconsin Regents.
+# Copyright 2017, University of Wisconsin Regents.
 # Licensed under the GNU GPLv3.
 
 if [ -z "$CSPP_ACTIVE_FIRE_HOME" ]; then
@@ -13,7 +13,7 @@ fi
 . ${CSPP_ACTIVE_FIRE_HOME}/cspp_active_fire_noaa_runtime.sh
 
 usage() {
-    $PY $CSPP_ACTIVE_FIRE_HOME/scripts/cspp_active_fire_noaa.py --help
+    $PY $CSPP_ACTIVE_FIRE_HOME/scripts/afire_compare_netcdf.py --help
 }
 
 if [ -z "$1" ]; then
@@ -21,5 +21,4 @@ if [ -z "$1" ]; then
     exit 3
 fi
 
-$PY ${CSPP_ACTIVE_FIRE_HOME}/scripts/cspp_active_fire_noaa.py "$@"
-
+$PY ${CSPP_ACTIVE_FIRE_HOME}/scripts/afire_compare_netcdf.py "$@"

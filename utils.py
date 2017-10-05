@@ -200,7 +200,7 @@ def check_and_convert_path(key, a_path, check_write=False):
         return ':'.join(abs_locations)
 
 
-def check_existing_env_var(varname, default_value=None):
+def check_existing_env_var(varname, default_value=None, flag_warn=False):
     '''
     If variable exists then use value, otherwise use default
     '''
@@ -211,15 +211,18 @@ def check_existing_env_var(varname, default_value=None):
         if default_value is not None:
             value = default_value
         else:
-            LOG.warn("{} is not set, please update environment and re-try".format(varname))
-            LOG.warn("Environment variable missing. {}".format(varname))
-            #sys.exit(9)
+            if flag_warn:
+                LOG.warn("{} is not set, please update environment and re-try".format(varname))
+                LOG.warn("Environment variable missing. {}".format(varname))
+            else:
+                LOG.debug("{} is not set, please update environment and re-try".format(varname))
+                LOG.debug("Environment variable missing. {}".format(varname))
 
     return value
 
 
-def check_and_convert_env_var(varname, check_write=False, default_value=None):
-    value = check_existing_env_var(varname, default_value=default_value)
+def check_and_convert_env_var(varname, check_write=False, default_value=None, flag_warn=False):
+    value = check_existing_env_var(varname, default_value=default_value, flag_warn=flag_warn)
     path = check_and_convert_path(varname, value, check_write=check_write)
     return value, path
 
@@ -704,7 +707,8 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
     # Explicit setting of cache dir failed, falling back to CSPP_ACTIVE_FIRE_CACHE_DIR...
     if returned_cache_dir is None:
         LOG.info('Creating cache dir from {}...'.format(cache_env_name))
-        returned_cache_dir = check_existing_env_var(cache_env_name, default_value=None)
+        returned_cache_dir = check_existing_env_var(cache_env_name, default_value=None,
+                                                    flag_warn=False)
         LOG.debug('{} = {}'.format(cache_env_name, returned_cache_dir))
         LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
         current_dir = os.getcwd()

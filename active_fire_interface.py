@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-active_file_interface.py
+active_fire_interface.py
 
 
  * DESCRIPTION: This file contains routines that contruct a series of valid command line
@@ -24,7 +24,7 @@ import h5py
 
 from unaggregate import find_aggregated, unaggregate_inputs
 
-LOG = logging.getLogger('active_file_interface')
+LOG = logging.getLogger('active_fire_interface')
 
 
 def get_granule_ID(IET_StartTime):
