@@ -14,10 +14,12 @@ Licensed under GNU GPLv3.
 """
 
 import os
+from os.path import basename, dirname, curdir, abspath, isdir, isfile, exists, splitext, join as pjoin
 import logging
 #import time
 import re
 from glob import glob
+import string
 import numpy as np
 from datetime import datetime
 import h5py
@@ -76,7 +78,7 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
     re_pattern = re.compile(pattern)
 
     # Get some information based on the filename
-    file_basename = os.path.basename(filename)
+    file_basename = basename(filename)
     LOG.debug("file_basename = {}".format(file_basename))
     file_info = dict(re_pattern.match(file_basename).groupdict())
     LOG.debug("file_info = {}".format(file_info))
@@ -132,7 +134,7 @@ def get_leapsec_table(leapsecond_dir):
 
     months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
     month_enum = {item: idx for idx, item in enumerate(months, start=1)}
-    leapsec_filename = os.path.join(leapsecond_dir, 'IETTime.dat')
+    leapsec_filename = pjoin(leapsecond_dir, 'IETTime.dat')
     try:
         leapsec_file = open(leapsec_filename, "ro")  # Open template file for reading
     except Exception, err:
@@ -189,19 +191,24 @@ def generate_file_list(inputs, afire_options, full=False):
         input_files.sort()
         return input_files
 
-    input_prefixes = ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
+    m_band_prefixes = ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
+    i_band_prefixes = ['GMTCO', 'GITCO', 'SVI01', 'SVI02', 'SVI03', 'SVI04', 'SVI05', 'SVM13', 'IVCDB']
+
+    input_prefixes = i_band_prefixes if afire_options['i_band'] else m_band_prefixes
+
+    afire_options['input_prefixes'] = input_prefixes
 
     input_dirs = []
     input_files = []
 
     # Sort the command line inputs into directory and file inputs...
     for input in inputs:
-        input = os.path.abspath(os.path.expanduser(input))
-        if os.path.isdir(input):
+        input = abspath(os.path.expanduser(input))
+        if isdir(input):
             # Input file glob is of form "/path/to/files"
             LOG.debug("Input {} is a directory containing files...".format(input))
             input_dirs.append(input)
-        elif os.path.isfile(input):
+        elif isfile(input):
             # Input file glob is of form "/path/to/files/goes13_1_2015_143_1745.input"
             LOG.debug("Input {} is a file.".format(input))
             input_files.append(input)
@@ -240,7 +247,7 @@ def generate_file_list(inputs, afire_options, full=False):
     for dirs in input_dirs:
         for input_prefix in input_prefixes:
             input_glob = '{}*.h5'.format(input_prefix)
-            input_glob = os.path.join(dirs, input_glob)
+            input_glob = pjoin(dirs, input_glob)
             LOG.debug("input glob is {}".format(input_glob))
             temp_input_files = glob(input_glob)
             temp_input_files.sort()
@@ -297,7 +304,7 @@ def generate_file_list(inputs, afire_options, full=False):
     # Loop through the input files and determine the dirs in which they are contained
     input_dirs_from_files = []
     for input_file in input_files:
-        input_dirs_from_files.append(os.path.dirname(input_file))
+        input_dirs_from_files.append(dirname(input_file))
 
     input_dirs_from_files = list(set(input_dirs_from_files))
     input_dirs_from_files.sort()
@@ -318,7 +325,7 @@ def generate_file_list(inputs, afire_options, full=False):
     for dirs in input_dirs_from_files:
         for input_prefix in input_prefixes:
             input_glob = '{}*.h5'.format(input_prefix)
-            input_glob = os.path.join(dirs, input_glob)
+            input_glob = pjoin(dirs, input_glob)
             LOG.debug("input glob is {}".format(input_glob))
             temp_input_files = glob(input_glob)
             temp_input_files.sort()
@@ -385,57 +392,138 @@ def get_afire_inputs(inputs, afire_options):
         granule_id_list = afire_data_dict.keys()
         granule_id_list.sort()
 
+    # Loop through the granule IDs and make sure that each one has a complete set of valid inputs.
+    bad_granule_id = []
+    for granule_id in granule_id_list:
+        LOG.debug('Checking granule_id {}...'.format(granule_id))
+        missing_prefixes = []
+        for prefix in afire_options['input_prefixes']:
+            LOG.debug('\tChecking prefix {}...'.format(prefix))
+            try:
+                LOG.debug('\t\tafire_data_dict["{}"]["{}"] = {}'.format(
+                    granule_id, prefix, basename(afire_data_dict[granule_id][prefix]['file'])))
+            except KeyError:
+                LOG.debug("\t\tInput prefix {} not present...".format(prefix))
+                missing_prefixes.append(prefix)
+
+        if missing_prefixes != []:
+            LOG.warn("Granule ID {} is missing the prefixes {}, removing this granule ID..."
+                    .format(granule_id, ', '.join(missing_prefixes)))
+            bad_granule_id.append(granule_id)
+
+    for granule_id in bad_granule_id:
+        granule_id_list.pop(granule_id_list.index(granule_id))
+        afire_data_dict.pop(granule_id)
+
     return afire_data_dict, granule_id_list
 
 
-def construct_cmd_invocations(afire_data_dict):
+def construct_cmd_invocations(afire_data_dict, afire_options):
     '''
     Take the list inputs, and construct the required command line invocations. Commands are of the
     form...
 
-    vfire GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
+    vfire_m GMTCO.h5 SVM05.h5 SVM07.h5 SVM11.h5 SVM13.h5 SVM15.h5 SVM16.h5 \
         GRLWM_npp_d{}_t{}_e{}_b{}_cspp_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_cspp_dev.nc \
         metadata_id metadata_link time
+
+    vfire_i GITCO.h5 SVI01.h5 SVI02.h5 SVI03.h5 SVI04.h5 SVI05.h5 SVM13.h5 IVCDB.h5 \
+        GRLWM_npp_d{}_t{}_e{}_b{}_cspp_dev.nc AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_cspp_dev.nc \
+        metadata_id metadata_link time
+
+    The I-band AF still requires the M-band geolocation (GMTCO) to granulate the LWM, which is still
+    750m resolution.
     '''
 
     granule_id_list = afire_data_dict.keys()
     granule_id_list.sort()
 
+    geo_prefix = 'GITCO' if afire_options['i_band'] else 'GMTCO'
+    lwm_prefix = 'GRLWM'
+    af_prefix = 'AFIMG' if afire_options['i_band'] else 'AFMOD'
+    vfire_exe = 'vfire375_noaa_static' if afire_options['i_band'] else 'vfire_hdf5_static'
+
+    afire_options['vfire_exe'] = vfire_exe
+
     for granule_id in granule_id_list:
 
+        creation_dt = datetime.utcnow()
+
         # Construct the land water mask filename
-        land_water_mask = 'GRLWM_npp_d{}_t{}_e{}_b{}_cspp_dev.nc'.format(
-            afire_data_dict[granule_id]['GMTCO']['date'],
-            afire_data_dict[granule_id]['GMTCO']['start_time'],
-            afire_data_dict[granule_id]['GMTCO']['end_time'],
-            afire_data_dict[granule_id]['GMTCO']['orbit']
+        '''
+        AF-LAND_MASK_NASA_1KM_npp_s201808072032197_e201808072033439_c201808072126320.nc
+        '''
+        lwm_start_time = '{}{}'.format(
+            afire_data_dict[granule_id][geo_prefix]['date'],
+            afire_data_dict[granule_id][geo_prefix]['start_time']
+            )
+        lwm_end_time = '{}{}'.format(
+            afire_data_dict[granule_id][geo_prefix]['date'],
+            afire_data_dict[granule_id][geo_prefix]['end_time']
+            )
+
+        land_water_mask = 'AF-LAND_MASK_NASA_1KM_{}_s{}_e{}.nc'.format(
+            afire_data_dict[granule_id][geo_prefix]['sat'],
+            lwm_start_time,
+            lwm_end_time,
+            #creation_dt.strftime("%Y%m%d%H%M%S%f")
         )
         afire_data_dict[granule_id]['GRLWM'] = {'file': land_water_mask}
 
         # Construct the output filename.
-        afire_output_file = 'AFEDR_npp_d{}_t{}_e{}_b{}_cCTIME_cspp_dev.nc'.format(
-            afire_data_dict[granule_id]['GMTCO']['date'],
-            afire_data_dict[granule_id]['GMTCO']['start_time'],
-            afire_data_dict[granule_id]['GMTCO']['end_time'],
-            afire_data_dict[granule_id]['GMTCO']['orbit']
+        afire_output_file = '{}_{}_d{}_t{}_e{}_b{}_c{}_cspp_dev.nc'.format(
+            af_prefix,
+            afire_data_dict[granule_id][geo_prefix]['sat'],
+            afire_data_dict[granule_id][geo_prefix]['date'],
+            afire_data_dict[granule_id][geo_prefix]['start_time'],
+            afire_data_dict[granule_id][geo_prefix]['end_time'],
+            afire_data_dict[granule_id][geo_prefix]['orbit'],
+            creation_dt.strftime("%Y%m%d%H%M%S%f")
         )
-        afire_data_dict[granule_id]['AFEDR'] = {'file': afire_output_file}
+        afire_output_txt_file = '{}.txt'.format(splitext(afire_output_file)[0])
+
+        afire_data_dict[granule_id]['AFEDR'] = {
+            'file': afire_output_file,
+            'txt': afire_output_txt_file
+        }
 
         # Construct the command line invocation. As the "vfire" binary is currently constructed,
-        # The order of the inouts is important.
-        afire_data_dict[granule_id]['cmd'] = './vfire_static {} {} {} {} {} {} {} {} {} '.format(
-            os.path.basename(afire_data_dict[granule_id]['SVM13']['file']),
-            os.path.basename(afire_data_dict[granule_id]['SVM15']['file']),
-            os.path.basename(afire_data_dict[granule_id]['SVM16']['file']),
-            os.path.basename(afire_data_dict[granule_id]['SVM05']['file']),
-            os.path.basename(afire_data_dict[granule_id]['SVM07']['file']),
-            os.path.basename(afire_data_dict[granule_id]['SVM11']['file']),
-            os.path.basename(afire_data_dict[granule_id]['GMTCO']['file']),
-            os.path.basename(afire_data_dict[granule_id]['GRLWM']['file']),
-            os.path.basename(afire_data_dict[granule_id]['AFEDR']['file'])
-        )
-        afire_data_dict[granule_id]['cmd'] = '{} metadata_id metadata_link time'.format(
-            afire_data_dict[granule_id]['cmd'])
+        # The order of the inputs is important.
+        if afire_options['i_band']:
+            #try:
+            af_format_str = './{} -a {} -ndv' + ' {}' * 11
+            afire_data_dict[granule_id]['cmd'] = af_format_str.format(
+                vfire_exe,
+                basename(afire_data_dict[granule_id]['AFEDR']['txt']),
+                basename(afire_data_dict[granule_id]['SVI01']['file']),
+                basename(afire_data_dict[granule_id]['SVI02']['file']),
+                basename(afire_data_dict[granule_id]['SVI03']['file']),
+                basename(afire_data_dict[granule_id]['SVI04']['file']),
+                basename(afire_data_dict[granule_id]['SVI05']['file']),
+                basename(afire_data_dict[granule_id]['SVM13']['file']),
+                basename(afire_data_dict[granule_id]['IVCDB']['file']),
+                basename(afire_data_dict[granule_id]['GITCO']['file']),
+                basename(afire_data_dict[granule_id]['GRLWM']['file']),
+                'PersistentWaterFireRef.txt',
+                basename(afire_data_dict[granule_id]['AFEDR']['file'])
+            )
+            #except KeyError:
+
+        else:
+            af_format_str = './{}' + ' {}' * 10
+            afire_data_dict[granule_id]['cmd'] = af_format_str.format(
+                vfire_exe,
+                basename(afire_data_dict[granule_id]['SVM13']['file']),
+                basename(afire_data_dict[granule_id]['SVM15']['file']),
+                basename(afire_data_dict[granule_id]['SVM16']['file']),
+                basename(afire_data_dict[granule_id]['SVM05']['file']),
+                basename(afire_data_dict[granule_id]['SVM07']['file']),
+                basename(afire_data_dict[granule_id]['SVM11']['file']),
+                basename(afire_data_dict[granule_id]['GMTCO']['file']),
+                basename(afire_data_dict[granule_id]['GRLWM']['file']),
+                basename(afire_data_dict[granule_id]['AFEDR']['file']),
+                'metadata_id metadata_link time'
+            )
 
         #afire_data_dict[granule_id]['cmd'] = 'sleep 0.5; echo "Executing {0:}"; exit 0'.format(
             #granule_id)
@@ -449,14 +537,17 @@ def construct_cmd_invocations(afire_data_dict):
                                                 #granule_id)
 
         # Construct the run directory name
-        afire_data_dict[granule_id]['run_dir'] = 'NOAA_AFEDR_d{}_t{}_e{}_b{}_{}'.format(
-            afire_data_dict[granule_id]['GMTCO']['date'],
-            afire_data_dict[granule_id]['GMTCO']['start_time'],
-            afire_data_dict[granule_id]['GMTCO']['end_time'],
-            afire_data_dict[granule_id]['GMTCO']['orbit'],
+        afire_data_dict[granule_id]['run_dir'] = 'NOAA_{}_{}_d{}_t{}_e{}_b{}_{}'.format(
+            af_prefix,
+            afire_data_dict[granule_id][geo_prefix]['sat'],
+            afire_data_dict[granule_id][geo_prefix]['date'],
+            afire_data_dict[granule_id][geo_prefix]['start_time'],
+            afire_data_dict[granule_id][geo_prefix]['end_time'],
+            afire_data_dict[granule_id][geo_prefix]['orbit'],
             granule_id
         )
 
         afire_data_dict[granule_id]['granule_id'] = granule_id
+        afire_data_dict[granule_id]['creation_dt'] = creation_dt
 
     return afire_data_dict

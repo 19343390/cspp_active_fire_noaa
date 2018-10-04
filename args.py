@@ -30,6 +30,8 @@ def argument_parser():
 
     help_strings = {}
     help_strings['inputs'] = '''One or more input files or directories.'''
+    help_strings['i_band'] = '''Process in inputs using the 375m I-band algorithm, otherwise ''' \
+        '''use the 750m M-band algorithm.'''
     help_strings['work_dir'] = '''The work directory.'''
     help_strings['cache_dir'] = '''The directory where the granulated land water mask files are''' \
         ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
@@ -61,7 +63,7 @@ def argument_parser():
     else:
         pass
 
-    cspp_afire_version = 'cspp-active-fire-noaa_1.0.1'
+    cspp_afire_version = 'cspp-active-fire-noaa_2.0.0'
 
     # Initialise the parser.
     desc = '''Run NOAA Active Fire algorithm on VIIRS SDR files.'''
@@ -83,6 +85,13 @@ def argument_parser():
     )
 
     # Optional arguments
+
+    parser.add_argument('-I', '--i-band',
+                        dest='i_band',
+                        action="store_true",
+                        default=False,
+                        help=help_strings['i_band']
+                        )
 
     parser.add_argument('-W', '--work-dir',
                         dest='work_dir',

@@ -13,7 +13,7 @@ fi
 . ${CSPP_ACTIVE_FIRE_HOME}/cspp_active_fire_noaa_runtime.sh
 
 usage() {
-    $PY $CSPP_ACTIVE_FIRE_HOME/scripts/cspp_active_fire_noaa.py --help
+    $PY -W ignore $CSPP_ACTIVE_FIRE_HOME/scripts/cspp_active_fire_noaa.py --help
 }
 
 if [ -z "$1" ]; then
@@ -21,5 +21,5 @@ if [ -z "$1" ]; then
     exit 3
 fi
 
-$PY ${CSPP_ACTIVE_FIRE_HOME}/scripts/cspp_active_fire_noaa.py "$@"
+$PY -W ignore ${CSPP_ACTIVE_FIRE_HOME}/scripts/cspp_active_fire_noaa.py "$@"
 

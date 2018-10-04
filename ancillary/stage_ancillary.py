@@ -11,50 +11,78 @@ Licensed under GNU GPLv3.
 """
 
 import os
+from os.path import basename, dirname, curdir, abspath, isdir, isfile, exists, splitext, join as pjoin
 import logging
 import shutil
 import traceback
 import fcntl
+from subprocess import call, check_call, CalledProcessError
 
-from utils import create_dir
+from utils import create_dir, execute_binary_captured_inject_io
 
 import GridIP
 
 LOG = logging.getLogger('stage_ancillary')
 
+def nc_from_cdl(afire_options, granule_dict, lwm_file):
+    '''
+    Creates an empty output netCDF4 file from a CDL file.
+    '''
+    env_vars = {}
+    lwm_cdl_file = pjoin(afire_options['ancil_dir'],
+                                     'AF-LAND_MASK_NASA_1KM.cdl')
 
-def get_lwm(afire_options, granule_dict):
+    ncgen_bin = 'ncgen'
+    cmd = '{} -b {} -o {}'.format(ncgen_bin,
+                                     lwm_cdl_file,
+                                     lwm_file)
+    LOG.debug("cmd = {}".format(cmd))
 
     try:
+        LOG.debug("cmd = \\\n\t{}".format(cmd.replace(' ',' \\\n\t')))
+        rc = check_call([cmd], shell=True, env={})
+        LOG.debug('check_call() return value: {}'.format(rc))
+    except CalledProcessError as err:
+        rc = err.returncode
+        LOG.error("ncgen returned a value of {}".format(rc))
+        return rc
+
+    return rc
+
+def get_lwm(afire_options, granule_dict):
+    '''
+    Generate a granulated Land Water Mask (LWM) from the VIIRS GMTCO geolocation, and a global 0.5 degree
+    grid of the Land Water Mask.
+    '''
+
+    try:
+
         rc = 0
         geo_rc, subset_rc, granulate_rc, shipout_rc = 0, 0, 0, 0
         rc_dict = {'geo': geo_rc, 'subset': subset_rc, 'granulate': granulate_rc,
                    'shipout': shipout_rc}
 
-        # Construct the name of the land water mask template
-        lwm_template_file = os.path.join(afire_options['ancil_dir'],
-                                         'NPP_VIIRS_LAND_MASK_NASA_1KM.nc')
-        LOG.debug("LWM template filename: {}".format(lwm_template_file))
-
         # Check that the required cache dir already exists...
-        anc_dir = granule_dict['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
-        lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
-        if not os.path.isdir(lwm_dir):
+        #geo_prefix = 'GITCO' if afire_options['i_band'] else 'GMTCO' # FUTURE
+        geo_prefix = 'GMTCO'
+        anc_dir = granule_dict[geo_prefix]['dt'].strftime('%Y_%m_%d_%j-%Hh')
+        lwm_dir = pjoin(afire_options['cache_dir'], anc_dir)
+        if not isdir(lwm_dir):
             LOG.error("LWM dir {} is not considered a valid directory, aborting.".format(lwm_dir))
             return 1, rc_dict, None
 
         # Construct the name of the output GRLWM file
-        lwm_file = os.path.join(lwm_dir, granule_dict['GRLWM']['file'])
+        lwm_file = pjoin(lwm_dir, granule_dict['GRLWM']['file'])
         LOG.debug("Candidate LWM filename: {}".format(lwm_file))
 
         lwm_required = False
 
         # Check whether the GRLWM file exists...
-        if os.path.exists(lwm_file):
+        if exists(lwm_file):
 
             LOG.debug("LWM file {} exists...".format(lwm_file))
 
-            if not os.path.isfile(lwm_file):
+            if not isfile(lwm_file):
                 LOG.warning("{} is not a regular file, removing...".format(lwm_file))
                 os.remove(lwm_file)
                 lwm_required = True
@@ -78,7 +106,8 @@ def get_lwm(afire_options, granule_dict):
 
             # Copy the LWM template file to the cache LWM file for this geolocation
             try:
-                shutil.copyfile(lwm_template_file, lwm_file)
+                _ = nc_from_cdl(afire_options, granule_dict, lwm_file)
+                #shutil.copyfile(lwm_template_file, lwm_file)
             except Exception, err:
                 LOG.error("Unable to copy the LWM template file {} to the cache file {}, aborting."
                           .format(lwm_template_file, lwm_file))
@@ -123,90 +152,3 @@ def get_lwm(afire_options, granule_dict):
         raise
 
     return rc, rc_dict, lwm_file
-
-
-def get_lwm_flock(afire_options, granule_dict):
-
-    rc = 0
-
-    # Construct the full LWM filepath
-    anc_dir = granule_dict['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
-    lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
-    lwm_file = os.path.join(lwm_dir, granule_dict['GRLWM']['file'])
-    LOG.info("Candidate lwm_file = {}".format(lwm_file))
-
-    # Create the required dir in the cache dir
-    lwm_dir = create_dir(lwm_dir)
-    if lwm_dir is None:
-        return 1, None
-    else:
-        LOG.info("Successfully created cache dir {}".format(lwm_dir))
-
-    # Open the lock file
-    lwm_lock_name = "{}.lock".format(lwm_file)
-    LOG.info('Creating the lock file {}...'.format(lwm_lock_name))
-    lwm_lock_file = open(lwm_lock_name, "a")
-
-    try:
-        # Get the lock
-        LOG.info('Getting a lock on {}...'.format(lwm_lock_name))
-        fcntl.lockf(lwm_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        LOG.info('Successfully got a lock on {}...'.format(lwm_lock_name))
-
-        # We have the lock, so now create the associated file and populate it, or confirm that we
-        # already have it...
-        if not os.path.exists(lwm_file):
-
-            # Construct the name of the land water mask template
-            lwm_template_file = os.path.join(afire_options['ancil_dir'],
-                                             'NPP_VIIRS_LAND_MASK_NASA_1KM.nc')
-            LOG.info("LWM template file = {}".format(lwm_template_file))
-
-            # Copy the LWM template file to the cache LWM file for this geolocation
-            try:
-                shutil.copyfile(lwm_template_file, lwm_file)
-            except Exception, err:
-                LOG.error("Unable to copy the LWM template file {} to the cache file, aborting."
-                          .format(lwm_template_file, lwm_file))
-                LOG.info(traceback.format_exc())
-                LOG.error(err)
-                return 1, None
-
-            # Get the Land Water Mask object
-            className = GridIP.classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran']
-            LandWaterMask = getattr(GridIP, className)(granule_dict, afire_options)
-
-            # Get the geolocation
-            geo_rc = LandWaterMask.setGeolocationInfo()
-
-            # Subset the gridded data for this ancillary object to cover the required lat/lon range.
-            subset_rc = LandWaterMask.subset()
-
-            # Granulate the gridded data in this ancillary object for the current granule...
-            granulate_rc = LandWaterMask.granulate()
-
-            # Write the new data to the LWM template file
-            shipout_rc = LandWaterMask.shipOutToFile(lwm_file)
-
-            # Construct the overall return code
-            rc = int(bool(geo_rc) or bool(subset_rc) or bool(granulate_rc) or bool(shipout_rc))
-
-        else:
-            LOG.info('... {} is already in the local cache.'.format(granule_dict['GRLWM']['file']))
-
-        # Release the lock
-        LOG.info('Releasing the lock on {}...'.format(lwm_lock_name))
-        fcntl.lockf(lwm_lock_file, fcntl.LOCK_UN)
-
-        # Close the lock file
-        LOG.info('Closing the lock file {}'.format(lwm_lock_name))
-        lwm_lock_file.close()
-
-    except IOError:
-
-        LOG.info(traceback.format_exc())
-        LOG.warn("Could not get a lock on {}".format(lwm_lock_name))
-        LOG.info('Closing the lock file {}'.format(lwm_lock_name))
-        lwm_lock_file.close()
-
-    return rc, lwm_file

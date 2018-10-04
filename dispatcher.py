@@ -13,13 +13,17 @@ Licensed under GNU GPLv3.
 """
 
 import os
+from os.path import basename, dirname, curdir, abspath, isdir, isfile, exists, splitext, join as pjoin
 import logging
 import time
 import shutil
+from glob import glob
 import traceback
 import multiprocessing
 from datetime import datetime
+from subprocess import call, check_call, CalledProcessError
 
+import h5py
 from netCDF4 import Dataset
 
 from utils import link_files, getURID, execution_time, execute_binary_captured_inject_io, cleanup
@@ -66,8 +70,8 @@ def afire_submitter(args):
         # Create the run dir for this input file
         log_idx = 0
         while True:
-            run_dir = os.path.join(work_dir, "{}_run_{}".format(granule_dict['run_dir'], log_idx))
-            if not os.path.exists(run_dir):
+            run_dir = pjoin(work_dir, "{}_run_{}".format(granule_dict['run_dir'], log_idx))
+            if not exists(run_dir):
                 os.makedirs(run_dir)
                 break
             else:
@@ -107,10 +111,9 @@ def afire_submitter(args):
         else:
             # Link the required files and directories into the work directory...
             paths_to_link = [
-                os.path.join(afire_home, 'vendor/vfire_static'),
+                pjoin(afire_home, 'vendor', afire_options['vfire_exe']),
                 lwm_file,
-            ] + [granule_dict[key]['file'] for key in ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13',
-                                                       'SVM15', 'SVM16']]
+            ] + [granule_dict[key]['file'] for key in afire_options['input_prefixes']]
             number_linked = link_files(run_dir, paths_to_link)
             LOG.debug("\tWe are linking {} files to the run dir:".format(number_linked))
             for linked_files in paths_to_link:
@@ -150,129 +153,130 @@ def afire_submitter(args):
             creation_dt = datetime.utcnow()
             timestamp = creation_dt.isoformat()
             logname = "{}_{}.log".format(run_dir, timestamp)
-            log_dir = os.path.dirname(run_dir)
-            logpath = os.path.join(log_dir, logname)
+            log_dir = dirname(run_dir)
+            logpath = pjoin(log_dir, logname)
             logfile_obj = open(logpath, 'w')
             for line in exe_out.splitlines():
                 logfile_obj.write(line + "\n")
             logfile_obj.close()
 
-            # Move the output file from the run_dir to the work_dir
-            old_output_file = os.path.join(run_dir, granule_dict['AFEDR']['file'])
-            new_output_file = os.path.join(work_dir, granule_dict['AFEDR']['file'])
-            new_output_file = new_output_file.replace("CTIME",
-                                                      creation_dt.strftime("%Y%m%d%H%M%S%f"))
-            LOG.debug("\tMoving output file from {} to {}".format(old_output_file, new_output_file))
-            try:
-                shutil.move(old_output_file, new_output_file)
-            except Exception:
-                rc_problem = 1
-                LOG.warning("\tProblem moving output file from {} to {}".format(
-                    old_output_file, new_output_file))
-                LOG.debug(traceback.format_exc())
-
             # Update the various file global attributes
             try:
-                file_obj = Dataset(new_output_file, "a", format="NETCDF4")
 
-                #
-                # Update the attributes, preserving order (currently hangs)
-                #
-                #global_attrs = {}
-                #for attr in file_obj.ncattrs():
-                    #LOG.info("Reading in global attribute {}".format(attr))
-                    #global_attrs[attr] = getattr(file_obj, attr)
+                old_output_file = pjoin(run_dir, granule_dict['AFEDR']['file'])
+                creation_dt = granule_dict['creation_dt']
 
-                #global_attrs['date_created'] = creation_dt.isoformat()
-                #global_attrs['granule_id'] = granule_id
-                #global_attrs['history'] = '{}; CSPP Active Fires version: {}'.format(
-                        #global_attrs['history'],
-                        #afire_options['version'])
-                #global_attrs['Metadata_Link'] = os.path.basename(new_output_file)
-                #global_attrs['id'] = getURID(creation_dt)['URID']
-
-                #for attr in file_obj.ncattrs():
-                    #LOG.info("Writing out global attribute {}".format(attr))
-                    ##global_attrs[attr] = getattr(file_obj, attr)
-                    #setattr(file_obj, attr, global_attrs[attr])
 
                 #
                 # Update the attributes, moving to the end
                 #
-                setattr(file_obj, 'date_created', creation_dt.isoformat())
-                setattr(file_obj, 'granule_id', granule_id)
-                history_string = '{}; CSPP Active Fires version: {}'.format(
-                    getattr(file_obj, 'history'),
-                    afire_options['version'])
-                setattr(file_obj, 'history', history_string)
-                setattr(file_obj, 'Metadata_Link', os.path.basename(new_output_file))
-                setattr(file_obj, 'id', getURID(creation_dt)['URID'])
+                if afire_options['i_band']:
 
-                #
-                # Check if there are any fire pixels, and write the associated fire data to
-                # a text file...
-                #
-                nfire = len(file_obj['Fire Pixels'].dimensions['nfire'])
-                LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
+                    # Update the I-band attributes
 
-                if nfire > 0:
-                    Along_scan_pixel_dim = 0.75
-                    Along_track_pixel_dim = 0.75
-                    fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
-                    fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_T13', 'FP_confidence',
-                                     'FP_power']
-                    fire_data = []
-                    for dset in fire_datasets:
-                        fire_data.append(file_obj['Fire Pixels'].variables[dset][:])
+                    h5_file_obj = h5py.File(old_output_file, "a")
+                    h5_file_obj.attrs.create('date_created', creation_dt.isoformat())
+                    h5_file_obj.attrs.create('granule_id', granule_id)
+                    history_string = 'CSPP Active Fires version: {}'.format(
+                        afire_options['version'])
+                    h5_file_obj.attrs.create('history', history_string)
+                    h5_file_obj.attrs.create('Metadata_Link', basename(old_output_file))
+                    h5_file_obj.attrs.create('id', getURID(creation_dt)['URID'])
+                    h5_file_obj.close()
 
-                    output_txt_file = '.'.join(new_output_file.split('.')[:-1]) + '.txt'
+                else:
 
-                    format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.2f}, {6:6.2f},''' \
-                        ''' {3:4d}, {4:13.8f}'''
+                    # Update the M-band attributes, and write the fire data to a text file.
 
-                    txt_file_header = \
-                        '''# Active Fires EDR\n''' \
-                        '''#\n''' \
-                        '''# source: {}\n''' \
-                        '''# version: {}\n''' \
-                        '''#\n''' \
-                        '''# column 1: latitude of fire pixel (degrees)\n''' \
-                        '''# column 2: longitude of fire pixel (degres)\n''' \
-                        '''# column 3: M13 brightness temperature of fire pixel (K)\n''' \
-                        '''# column 4: Along-scan fire pixel resolution (km)\n''' \
-                        '''# column 5: Along-track fire pixel resolution (km)\n''' \
-                        '''# column 6: detection confidence (%)\n''' \
-                        '''# column 7: fire radiative power (MW)\n''' \
-                        '''#\n# number of fire pixels: {}\n''' \
-                        '''#'''.format(os.path.basename(new_output_file), history_string, nfire)
+                    nc_file_obj = Dataset(old_output_file, "a", format="NETCDF4")
+                    setattr(nc_file_obj, 'date_created', creation_dt.isoformat())
+                    setattr(nc_file_obj, 'granule_id', granule_id)
+                    history_string = 'CSPP Active Fires version: {}'.format(
+                        afire_options['version'])
+                    setattr(nc_file_obj, 'history', history_string)
+                    setattr(nc_file_obj, 'Metadata_Link', basename(old_output_file))
+                    setattr(nc_file_obj, 'id', getURID(creation_dt)['URID'])
+                
+                    # Check if there are any fire pixels, and write the associated fire data to
+                    # a text file...
+                    
+                    nfire = len(nc_file_obj['Fire Pixels'].dimensions['nfire'])
+                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
 
-                    txt_file_obj = file(output_txt_file, 'w')
+                    if nfire > 0:
+                        Along_scan_pixel_dim = 0.75
+                        Along_track_pixel_dim = 0.75
+                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
+                        fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_T13', 'FP_confidence',
+                                         'FP_power']
+                        fire_data = []
+                        for dset in fire_datasets:
+                            fire_data.append(nc_file_obj['Fire Pixels'].variables[dset][:])
 
-                    try:
-                        txt_file_obj.write(txt_file_header + "\n")
+                        output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
+                        output_txt_file = output_txt_file.replace('dev','alt')
 
-                        for FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power in zip(
-                                *fire_data):
-                            fire_vars = [FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power]
-                            line = format_str.format(*(fire_vars + fire_pixel_res))
-                            txt_file_obj.write(line + "\n")
+                        format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.2f}, {6:6.2f},''' \
+                            ''' {3:4d}, {4:13.8f}'''
 
-                        txt_file_obj.close()
-                    except Exception:
-                        txt_file_obj.close()
-                        rc_problem = 1
-                        LOG.warning("\tProblem writing Active fire text file: {}".format(
-                            output_txt_file))
-                        LOG.warn(traceback.format_exc())
+                        txt_file_header = \
+                            '''# Active Fires EDR\n''' \
+                            '''#\n''' \
+                            '''# source: {}\n''' \
+                            '''# version: {}\n''' \
+                            '''#\n''' \
+                            '''# column 1: latitude of fire pixel (degrees)\n''' \
+                            '''# column 2: longitude of fire pixel (degres)\n''' \
+                            '''# column 3: M13 brightness temperature of fire pixel (K)\n''' \
+                            '''# column 4: Along-scan fire pixel resolution (km)\n''' \
+                            '''# column 5: Along-track fire pixel resolution (km)\n''' \
+                            '''# column 6: detection confidence (%)\n''' \
+                            '''# column 7: fire radiative power (MW)\n''' \
+                            '''#\n# number of fire pixels: {}\n''' \
+                            '''#'''.format(basename(old_output_file), history_string, nfire)
 
-                file_obj.close()
+                        nc_file_obj.close()
+
+                        txt_file_obj = file(output_txt_file, 'w')
+
+                        try:
+                            txt_file_obj.write(txt_file_header + "\n")
+
+                            for FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power in zip(
+                                    *fire_data):
+                                fire_vars = [FP_latitude, FP_longitude, FP_T13, FP_confidence, FP_power]
+                                line = format_str.format(*(fire_vars + fire_pixel_res))
+                                txt_file_obj.write(line + "\n")
+
+                            txt_file_obj.close()
+                        except Exception:
+                            txt_file_obj.close()
+                            rc_problem = 1
+                            LOG.warning("\tProblem writing Active fire text file: {}".format(
+                                output_txt_file))
+                            LOG.warn(traceback.format_exc())
+
 
             except Exception:
-                file_obj.close()
                 rc_problem = 1
                 LOG.warning("\tProblem setting attributes in output file {}".format(
-                    new_output_file))
+                    old_output_file))
                 LOG.debug(traceback.format_exc())
+
+            # Move output files to the work directory
+            LOG.debug("\tMoving output files from {} to {}".format(work_dir, run_dir))
+            af_prefix = 'AFIMG' if afire_options['i_band'] else 'AFMOD'
+            outfiles = glob(pjoin(run_dir, '{}*.nc'.format(af_prefix))) \
+                     + glob(pjoin(run_dir, '{}*.txt'.format(af_prefix)))
+
+            for outfile in outfiles:
+                try:
+                    shutil.move(outfile, work_dir)
+                except Exception:
+                    rc_problem = 1
+                    LOG.warning("\tProblem moving output {} from {} to {}".format(
+                        outfile, run_dir, work_dir))
+                    LOG.debug(traceback.format_exc())
 
         # If no problems, remove the run dir
         if (rc_exe == 0) and (rc_problem == 0) and afire_options['docleanup']:
@@ -282,7 +286,7 @@ def afire_submitter(args):
         LOG.warn("\tGeneral warning for {}".format(granule_id))
         LOG.debug(traceback.format_exc())
         os.chdir(current_dir)
-        raise
+        #raise
 
     return [granule_id, rc_exe, rc_problem, exe_out]
 

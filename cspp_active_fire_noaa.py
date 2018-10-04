@@ -38,6 +38,7 @@ def process_afire_inputs(work_dir, afire_options):
 
     #ret_val = 0
     afire_home = afire_options['afire_home']
+    geo_prefix = 'GITCO' if afire_options['i_band'] else 'GMTCO'
 
     attempted_runs = []
     successful_runs = []
@@ -51,8 +52,17 @@ def process_afire_inputs(work_dir, afire_options):
     # Create a dictionary containing valid inputs and related metadata
     afire_data_dict, granule_id_list = get_afire_inputs(afire_options['inputs'], afire_options)
 
+    for gran_key in afire_data_dict.keys():
+        for file_key in afire_data_dict[gran_key].keys():
+            LOG.debug('afire_data_dict["{}"]["{}"] = {}'.format(gran_key, file_key, afire_data_dict[gran_key][file_key]))
+
+    if (afire_data_dict == {} or granule_id_list == []):
+        LOG.info('>>> No valid {} inputs detected, aborting.'.format(
+            'I-band' if afire_options['i_band'] else 'M-band'))
+        return [],[],[],[]
+
     # Add the required command line invocations to the input dict...
-    afire_data_dict = construct_cmd_invocations(afire_data_dict)
+    afire_data_dict = construct_cmd_invocations(afire_data_dict, afire_options)
 
     LOG.info('')
     LOG.info('>>> Input Files')
@@ -61,19 +71,19 @@ def process_afire_inputs(work_dir, afire_options):
     LOG.info(label_format_str.format("<Granule ID>", "<Granule Start Time>"))
     for granule_id in granule_id_list:
         LOG.info(label_format_str.format(granule_id,
-                                         str(afire_data_dict[granule_id]['GMTCO']['dt'])))
+                                         str(afire_data_dict[granule_id][geo_prefix]['dt'])))
 
     # Clean out product cache files that are too old.
     LOG.info('')
     if not afire_options['preserve_cache']:
         LOG.info(">>> Cleaning the ancillary cache back {} hours...".format(
             afire_options['cache_window']))
-        first_dt = afire_data_dict[granule_id_list[0]]['GMTCO']['dt']
+        first_dt = afire_data_dict[granule_id_list[0]][geo_prefix]['dt']
         clean_cache(afire_options['cache_dir'], afire_options['cache_window'], first_dt)
 
     # Create the required cache dirs
     for granule_id in granule_id_list:
-        anc_dir = afire_data_dict[granule_id]['GMTCO']['dt'].strftime('%Y_%m_%d_%j-%Hh')
+        anc_dir = afire_data_dict[granule_id][geo_prefix]['dt'].strftime('%Y_%m_%d_%j-%Hh')
         lwm_dir = os.path.join(afire_options['cache_dir'], anc_dir)
         lwm_dir = create_dir(lwm_dir)
         if lwm_dir is None:
@@ -144,6 +154,7 @@ def main():
     afire_options = {}
     afire_options['inputs'] = args.inputs
     afire_options['afire_home'] = os.path.abspath(afire_home)
+    afire_options['i_band'] = args.i_band
     afire_options['work_dir'] = os.path.abspath(args.work_dir)
     afire_options['ancil_dir'] = afire_ancil_path
     afire_options['cache_dir'] = setup_cache_dir(args.cache_dir, afire_options['work_dir'],

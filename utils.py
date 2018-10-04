@@ -710,12 +710,11 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
         returned_cache_dir = check_existing_env_var(cache_env_name, default_value=None,
                                                     flag_warn=False)
         LOG.debug('{} = {}'.format(cache_env_name, returned_cache_dir))
-        LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
-        current_dir = os.getcwd()
-        returned_cache_dir = os.path.join(current_dir, cache_env_name.lower())
-        returned_cache_dir = os.path.abspath(os.path.expanduser(returned_cache_dir))
-        LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
-        returned_cache_dir = create_dir(returned_cache_dir)
+        if returned_cache_dir is not None:
+            returned_cache_dir = os.path.join(returned_cache_dir, cache_env_name.lower())
+            returned_cache_dir = os.path.abspath(os.path.expanduser(returned_cache_dir))
+            LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
+            returned_cache_dir = create_dir(returned_cache_dir)
 
     # Creating cache dir from env var has failed, try to create in the current dir.
     if returned_cache_dir is None:
@@ -724,7 +723,7 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
         returned_cache_dir = os.path.join(current_dir, cache_env_name.lower())
         returned_cache_dir = create_dir(returned_cache_dir)
 
-    LOG.debug('Final returned_cache_dir = {}'.format(returned_cache_dir))
+    LOG.info('Using cache dir {}'.format(returned_cache_dir))
     return returned_cache_dir
 
 
