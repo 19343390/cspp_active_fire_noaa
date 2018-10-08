@@ -80,7 +80,11 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
     # Get some information based on the filename
     file_basename = basename(filename)
     LOG.debug("file_basename = {}".format(file_basename))
-    file_info = dict(re_pattern.match(file_basename).groupdict())
+    pattern_match = re_pattern.match(file_basename)
+    if pattern_match is not None:
+        file_info = dict(pattern_match.groupdict())
+    else:
+        return None, None, None, None
     LOG.debug("file_info = {}".format(file_info))
 
     # Determine the granule time info...

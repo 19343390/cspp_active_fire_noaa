@@ -106,7 +106,13 @@ def nagg_submitter(args):
 
         if 'GMTCO' in os.path.basename(agg_input_file):
             cmd = cmd_dict['GEO']
+        elif 'GITCO' in os.path.basename(agg_input_file):
+            cmd = cmd_dict['GEO']
         elif 'SVM' in os.path.basename(agg_input_file):
+            cmd = cmd_dict['SVM']
+        elif 'SVI' in os.path.basename(agg_input_file):
+            cmd = cmd_dict['SVM']
+        elif 'IVCDB' in os.path.basename(agg_input_file):
             cmd = cmd_dict['SVM']
         else:
             cmd = None
