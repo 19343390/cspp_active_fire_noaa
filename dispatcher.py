@@ -166,7 +166,6 @@ def afire_submitter(args):
                 old_output_file = pjoin(run_dir, granule_dict['AFEDR']['file'])
                 creation_dt = granule_dict['creation_dt']
 
-
                 #
                 # Update the attributes, moving to the end
                 #
@@ -174,6 +173,8 @@ def afire_submitter(args):
 
                     # Update the I-band attributes
 
+                    # FIXME: There is something screwey about the I-band outputs: they are NetCDF
+                    #        files, but they can only be opened with h5py.
                     h5_file_obj = h5py.File(old_output_file, "a")
                     h5_file_obj.attrs.create('date_created', creation_dt.isoformat())
                     h5_file_obj.attrs.create('granule_id', granule_id)
@@ -182,8 +183,65 @@ def afire_submitter(args):
                     h5_file_obj.attrs.create('history', history_string)
                     h5_file_obj.attrs.create('Metadata_Link', basename(old_output_file))
                     h5_file_obj.attrs.create('id', getURID(creation_dt)['URID'])
-                    h5_file_obj.close()
 
+                    # Check if there are any fire pixels, and write the associated fire data to
+                    # a text file...
+                    
+                    nfire = h5_file_obj.attrs['FirePix'][0]
+                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
+
+                    if nfire > 0:
+                        Along_scan_pixel_dim = 0.375
+                        Along_track_pixel_dim = 0.375
+                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
+                        fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_Rad13', 'FP_confidence',
+                                         'FP_power']
+                        fire_data = []
+                        for dset in fire_datasets:
+                            fire_data.append(h5_file_obj['/'+dset][:])
+
+                        output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
+                        output_txt_file = output_txt_file.replace('dev','alt')
+
+                        format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.2f}, {6:6.2f},''' \
+                            ''' {3:4d}, {4:13.8f}'''
+
+                        txt_file_header = \
+                            '''# Active Fires I-band EDR\n''' \
+                            '''#\n''' \
+                            '''# source: {}\n''' \
+                            '''# version: {}\n''' \
+                            '''#\n''' \
+                            '''# column 1: latitude of fire pixel (degrees)\n''' \
+                            '''# column 2: longitude of fire pixel (degres)\n''' \
+                            '''# column 3: M13 radiance of fire pixel (W/(m^2*sr*μm))\n''' \
+                            '''# column 4: Along-scan fire pixel resolution (km)\n''' \
+                            '''# column 5: Along-track fire pixel resolution (km)\n''' \
+                            '''# column 6: detection confidence (%)\n''' \
+                            '''# column 7: fire radiative power (MW)\n''' \
+                            '''#\n# number of fire pixels: {}\n''' \
+                            '''#'''.format(basename(old_output_file), history_string, nfire)
+
+                        h5_file_obj.close()
+
+                        txt_file_obj = file(output_txt_file, 'w')
+
+                        try:
+                            txt_file_obj.write(txt_file_header + "\n")
+
+                            for FP_latitude, FP_longitude, FP_R13, FP_confidence, FP_power in zip(
+                                    *fire_data):
+                                fire_vars = [FP_latitude, FP_longitude, FP_R13, FP_confidence, FP_power]
+                                line = format_str.format(*(fire_vars + fire_pixel_res))
+                                txt_file_obj.write(line + "\n")
+
+                            txt_file_obj.close()
+                        except Exception:
+                            txt_file_obj.close()
+                            rc_problem = 1
+                            LOG.warning("\tProblem writing Active fire text file: {}".format(
+                                output_txt_file))
+                            LOG.warn(traceback.format_exc())
                 else:
 
                     # Update the M-band attributes, and write the fire data to a text file.
@@ -220,7 +278,7 @@ def afire_submitter(args):
                             ''' {3:4d}, {4:13.8f}'''
 
                         txt_file_header = \
-                            '''# Active Fires EDR\n''' \
+                            '''# Active Fires M-band EDR\n''' \
                             '''#\n''' \
                             '''# source: {}\n''' \
                             '''# version: {}\n''' \
