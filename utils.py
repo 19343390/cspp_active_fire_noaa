@@ -711,7 +711,6 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
                                                     flag_warn=False)
         LOG.debug('{} = {}'.format(cache_env_name, returned_cache_dir))
         if returned_cache_dir is not None:
-            returned_cache_dir = os.path.join(returned_cache_dir, cache_env_name.lower())
             returned_cache_dir = os.path.abspath(os.path.expanduser(returned_cache_dir))
             LOG.debug('returned_cache_dir = {}'.format(returned_cache_dir))
             returned_cache_dir = create_dir(returned_cache_dir)
