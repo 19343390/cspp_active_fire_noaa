@@ -61,6 +61,9 @@ Thumbs.db
 # pycharm projects
 .idea
 
+# Visual Studio Code projects
+.vscode
+
 # Compiled object files
 *.o
 
