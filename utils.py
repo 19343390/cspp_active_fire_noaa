@@ -717,7 +717,7 @@ def setup_cache_dir(cache_dir, work_dir, cache_env_name):
 
     # Creating cache dir from env var has failed, try to create in the current dir.
     if returned_cache_dir is None:
-        LOG.info('Creating cache dir in the the current dir...')
+        LOG.info('Creating cache dir in the current dir...')
         current_dir = os.getcwd()
         returned_cache_dir = os.path.join(current_dir, cache_env_name.lower())
         returned_cache_dir = create_dir(returned_cache_dir)
@@ -731,7 +731,6 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
     Purge the cache of old files.
     """
 
-    # GRLWM_npp_d{}_t{}_e{}_b{}_ssec_dev.nc
     anc_file_pattern = ['(?P<kind>[A-Z]+)_',
                         '(?P<sat>[A-Za-z0-9]+)_', 'd(?P<date>\d+)_',
                         't(?P<start_time>\d+)_',
@@ -744,7 +743,6 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
 
     afire_anc_dirs = glob(os.path.join(cache_dir, '*_*_*_*-*h'))
     afire_anc_dirs.sort()
-    #LOG.debug('afire_anc_dirs: {} :'.format(afire_anc_dirs))
 
     too_old_files = []
     future_files = []
@@ -767,7 +765,6 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
             file_basename = os.path.basename(files)
 
             file_info = dict(re_anc_file_pattern.match(file_basename).groupdict())
-            #LOG.debug('{} : {}'.format(file_basename, file_info))
 
             date_str = '{}_{}'.format(file_info['date'], file_info['start_time'])
             deciseconds = int(date_str[-1])
