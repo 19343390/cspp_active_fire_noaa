@@ -213,7 +213,7 @@ def afire_submitter(args):
                             '''# version: {}\n''' \
                             '''#\n''' \
                             '''# column 1: latitude of fire pixel (degrees)\n''' \
-                            '''# column 2: longitude of fire pixel (degres)\n''' \
+                            '''# column 2: longitude of fire pixel (degrees)\n''' \
                             '''# column 3: M13 radiance of fire pixel (W/(m^2*sr*μm))\n''' \
                             '''# column 4: Along-scan fire pixel resolution (km)\n''' \
                             '''# column 5: Along-track fire pixel resolution (km)\n''' \
@@ -284,7 +284,7 @@ def afire_submitter(args):
                             '''# version: {}\n''' \
                             '''#\n''' \
                             '''# column 1: latitude of fire pixel (degrees)\n''' \
-                            '''# column 2: longitude of fire pixel (degres)\n''' \
+                            '''# column 2: longitude of fire pixel (degrees)\n''' \
                             '''# column 3: M13 brightness temperature of fire pixel (K)\n''' \
                             '''# column 4: Along-scan fire pixel resolution (km)\n''' \
                             '''# column 5: Along-track fire pixel resolution (km)\n''' \
