@@ -41,7 +41,16 @@ def compare_array(array1, array2, atol=1e-08, rtol=1e-05):
         LOG.error("Data shapes were not equal")
         raise ValueError("Data shapes were not equal")
 
+    if array1.size != array2.size:
+        LOG.error("Data sizes were not equal")
+        raise ValueError("Data sizes were not equal")
+
     total_pixels = array1.size
+    LOG.debug("Size of array1: {}".format(total_pixels))
+
+    if total_pixels == 0:
+        raise ValueError("Datasets have zero size")
+
     equal_pixels = numpy.count_nonzero(numpy.isclose(array1, array2, atol=atol, rtol=rtol, equal_nan=True))
     diff_pixels = total_pixels - equal_pixels
     if diff_pixels != 0:
@@ -89,8 +98,11 @@ def main(argv=sys.argv[1:]):
     num_diff = 0
     for file1, file2 in zip(args.a_files, args.b_files):
         LOG.debug("Comparing '{}' to '{}'".format(file1, file2))
-        num_diff += compare_netcdf(file1, file2, atol=args.atol,
-                                rtol=args.rtol, variables=args.variables)
+        try:
+            num_diff += compare_netcdf(file1, file2, atol=args.atol,
+                                       rtol=args.rtol, variables=args.variables)
+        except:
+            pass
 
     if num_diff == 0:
         print("SUCCESS")
