@@ -30,14 +30,14 @@ def argument_parser():
 
     help_strings = {}
     help_strings['inputs'] = '''One or more input files or directories.'''
-    help_strings['i_band'] = '''Process in inputs using the 375m I-band algorithm, otherwise ''' \
+    help_strings['i_band'] = '''Process inputs using the 375m I-band algorithm, otherwise ''' \
         '''use the 750m M-band algorithm.'''
     help_strings['work_dir'] = '''The work directory.'''
     help_strings['cache_dir'] = '''The directory where the granulated land water mask files are''' \
         ''' kept. Can also be specified\nby setting the CSPP_ACTIVE_FIRE_CACHE_DIR''' \
         ''' environment variable, otherwise defaults to\n"cspp_active_fire_cache_dir" in the'''\
         ''' current directory.'''
-    help_strings['cache_window'] = '''Limit ancillary cache to hold no more that this number of''' \
+    help_strings['cache_window'] = '''Limit ancillary cache to hold no more than this number of''' \
         ''' hours preceding\nthe target time. [default: %(default)s hours]'''
     help_strings['preserve_cache'] = '''Do not flush old files from the ancillary cache.''' \
         ''' [default: %(default)s]'''
@@ -45,8 +45,8 @@ def argument_parser():
         ''' [default: %(default)s]'''
     help_strings['num_cpu'] = '''The number of CPUs to try and use. [default: %(default)s]'''
     help_strings['debug'] = '''Always retain intermediate files. [default: %(default)s]'''
-    help_strings['verbosity'] = '''each occurrence increases verbosity 1 level from
-            ERROR: -v=WARNING -vv=INFO -vvv=DEBUG [default: %(default)s]'''
+    help_strings['verbosity'] = '''Each occurrence increases verbosity 1 level from''' \
+        ''' ERROR: -v=WARNING, -vv=INFO, -vvv=DEBUG [default: %(default)s]'''
     help_strings['version'] = '''Print the CSPP Active Fires package version'''
     help_strings['help'] = '''Show this help message and exit'''
     help_strings['expert'] = '''Display all help options, including the expert ones.'''
