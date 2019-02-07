@@ -1,0 +1,1 @@
+This repo contains the python scripting for running the NOAA VIIRS active fire detection algorithm developed by Giglio, et al.
