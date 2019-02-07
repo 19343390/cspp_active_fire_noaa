@@ -94,7 +94,7 @@ def nagg_submitter(args):
 
         os.chdir(unagg_inputs_dir)
 
-        nagg_exe = os.path.join(afire_home, 'vendor/nagg')
+        #nagg_exe = os.path.join(afire_home, 'vendor/nagg')
         nagg_exe = './nagg'
         prefix = os.path.basename(agg_input_file).split('_')[0]
 

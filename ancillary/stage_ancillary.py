@@ -32,10 +32,10 @@ def nc_from_cdl(afire_options, granule_dict, lwm_file):
     lwm_cdl_file = pjoin(afire_options['ancil_dir'],
                                      'AF-LAND_MASK_NASA_1KM.cdl')
 
-    ncgen_bin = 'ncgen'
+    ncgen_bin = pjoin(afire_options['afire_home'], 'vendor/ShellB3/bin', 'ncgen')
     cmd = '{} -b {} -o {}'.format(ncgen_bin,
-                                     lwm_cdl_file,
-                                     lwm_file)
+                                  lwm_cdl_file,
+                                  lwm_file)
     LOG.debug("cmd = {}".format(cmd))
 
     try:
