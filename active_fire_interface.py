@@ -110,15 +110,20 @@ def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_fil
             num_grans = grp_obj.attrs['AggregateNumberGranules'][0][0]
             is_aggregated = True if num_grans > 1 else False
 
-            #
+            # Get the IET and granule ID...
             gran_group_name = '/Data_Products/{0:}/{0:}_Gran_0'.format(collection_short_name)
             grp_obj = file_obj[gran_group_name]
             iet_time = grp_obj.attrs['N_Beginning_Time_IET'][0][0]
             granule_id = grp_obj.attrs['N_Granule_ID'][0][0]
 
             file_obj.close()
-        except:
+        except IOError, err:
             LOG.error("Reading of iet/granule_id failed for {}".format(filename))
+            LOG.error("{}, aborting...".format(err))
+            granule_id = None
+        except Exception, err:
+            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
+            LOG.error("{}, aborting...".format(err))
             file_obj.close()
             granule_id = None
     else:
