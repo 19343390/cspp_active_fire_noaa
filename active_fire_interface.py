@@ -499,7 +499,6 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
         # Construct the command line invocation. As the "vfire" binary is currently constructed,
         # The order of the inputs is important.
         if afire_options['i_band']:
-            #try:
             af_format_str = './{} -a {} -ndv' + ' {}' * 11
             afire_data_dict[granule_id]['cmd'] = af_format_str.format(
                 vfire_exe,
@@ -516,7 +515,6 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
                 'PersistentWaterFireRef.txt',
                 basename(afire_data_dict[granule_id]['AFEDR']['file'])
             )
-            #except KeyError:
 
         else:
             af_format_str = './{}' + ' {}' * 10

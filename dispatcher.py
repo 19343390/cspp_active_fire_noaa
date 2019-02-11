@@ -201,7 +201,6 @@ def afire_submitter(args):
                             fire_data.append(h5_file_obj['/'+dset][:])
 
                         output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
-                        output_txt_file = output_txt_file.replace('dev','alt')
 
                         format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.3f}, {6:6.3f},''' \
                             ''' {3:4d}, {4:13.8f}'''
@@ -223,6 +222,15 @@ def afire_submitter(args):
                             '''#'''.format(basename(old_output_file), history_string, nfire)
 
                         h5_file_obj.close()
+
+                        # Check whether the target AF text file exists, and remove it.
+                        if exists(output_txt_file):
+                            LOG.debug('{} exists, removing.'.format(output_txt_file))
+                            os.remove(output_txt_file)
+                        nasa_file = output_txt_file.replace('dev','dev_nasa')
+                        if exists(nasa_file):
+                            LOG.debug('{} exists, removing.'.format(nasa_file))
+                            os.remove(nasa_file)
 
                         txt_file_obj = file(output_txt_file, 'w')
 
@@ -272,7 +280,7 @@ def afire_submitter(args):
                             fire_data.append(nc_file_obj['Fire Pixels'].variables[dset][:])
 
                         output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
-                        output_txt_file = output_txt_file.replace('dev','alt')
+                        #output_txt_file = output_txt_file.replace('dev','alt')
 
                         format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.3f}, {6:6.3f},''' \
                             ''' {3:4d}, {4:13.8f}'''
