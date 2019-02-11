@@ -280,7 +280,6 @@ def afire_submitter(args):
                             fire_data.append(nc_file_obj['Fire Pixels'].variables[dset][:])
 
                         output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
-                        #output_txt_file = output_txt_file.replace('dev','alt')
 
                         format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.3f}, {6:6.3f},''' \
                             ''' {3:4d}, {4:13.8f}'''
