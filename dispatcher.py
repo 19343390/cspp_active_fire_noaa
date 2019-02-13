@@ -166,12 +166,18 @@ def afire_submitter(args):
                 old_output_file = pjoin(run_dir, granule_dict['AFEDR']['file'])
                 creation_dt = granule_dict['creation_dt']
 
+                # Check whether the target AF text file exists, and remove it.
+                output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
+                if exists(output_txt_file):
+                    LOG.debug('{} exists, removing.'.format(output_txt_file))
+                    os.remove(output_txt_file)
+
                 #
                 # Update the attributes, moving to the end
                 #
                 if afire_options['i_band']:
 
-                    # Update the I-band attributes
+                    # Update the I-band attributes, and write the fire data to a text file.
 
                     # FIXME: There is something screwey about the I-band outputs: they are NetCDF
                     #        files, but they can only be opened with h5py.
@@ -184,23 +190,25 @@ def afire_submitter(args):
                     h5_file_obj.attrs.create('Metadata_Link', basename(old_output_file))
                     h5_file_obj.attrs.create('id', getURID(creation_dt)['URID'])
 
-                    # Check if there are any fire pixels, and write the associated fire data to
-                    # a text file...
-                    
+                    # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = h5_file_obj.attrs['FirePix'][0]
-                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
-
-                    if nfire > 0:
-                        Along_scan_pixel_dim = 0.375
-                        Along_track_pixel_dim = 0.375
-                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
+                    if int(nfire) > 0:
                         fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_Rad13', 'FP_confidence',
                                          'FP_power']
                         fire_data = []
                         for dset in fire_datasets:
                             fire_data.append(h5_file_obj['/'+dset][:])
+                    h5_file_obj.close()
 
-                        output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
+                    # Check if there are any fire pixels, and write the associated fire data to
+                    # a text file...
+                    
+                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
+
+                    if int(nfire) > 0:
+                        Along_scan_pixel_dim = 0.375
+                        Along_track_pixel_dim = 0.375
+                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
 
                         format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.3f}, {6:6.3f},''' \
                             ''' {3:4d}, {4:13.8f}'''
@@ -221,17 +229,12 @@ def afire_submitter(args):
                             '''#\n# number of fire pixels: {}\n''' \
                             '''#'''.format(basename(old_output_file), history_string, nfire)
 
-                        h5_file_obj.close()
-
-                        # Check whether the target AF text file exists, and remove it.
-                        if exists(output_txt_file):
-                            LOG.debug('{} exists, removing.'.format(output_txt_file))
-                            os.remove(output_txt_file)
                         nasa_file = output_txt_file.replace('dev','dev_nasa')
                         if exists(nasa_file):
                             LOG.debug('{} exists, removing.'.format(nasa_file))
                             os.remove(nasa_file)
 
+                        LOG.info("\tWriting output text file {}".format(output_txt_file))
                         txt_file_obj = file(output_txt_file, 'w')
 
                         try:
@@ -263,23 +266,25 @@ def afire_submitter(args):
                     setattr(nc_file_obj, 'Metadata_Link', basename(old_output_file))
                     setattr(nc_file_obj, 'id', getURID(creation_dt)['URID'])
                 
-                    # Check if there are any fire pixels, and write the associated fire data to
-                    # a text file...
-                    
+                    # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = len(nc_file_obj['Fire Pixels'].dimensions['nfire'])
-                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
-
-                    if nfire > 0:
-                        Along_scan_pixel_dim = 0.75
-                        Along_track_pixel_dim = 0.75
-                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
+                    if int(nfire) > 0:
                         fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_T13', 'FP_confidence',
                                          'FP_power']
                         fire_data = []
                         for dset in fire_datasets:
                             fire_data.append(nc_file_obj['Fire Pixels'].variables[dset][:])
+                    nc_file_obj.close()
 
-                        output_txt_file = '{}.txt'.format(splitext(old_output_file)[0])
+                    # Check if there are any fire pixels, and write the associated fire data to
+                    # a text file...
+                    
+                    LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
+
+                    if int(nfire) > 0:
+                        Along_scan_pixel_dim = 0.75
+                        Along_track_pixel_dim = 0.75
+                        fire_pixel_res = [Along_scan_pixel_dim, Along_track_pixel_dim]
 
                         format_str = '''{0:13.8f}, {1:13.8f}, {2:13.8f}, {5:6.3f}, {6:6.3f},''' \
                             ''' {3:4d}, {4:13.8f}'''
@@ -300,8 +305,7 @@ def afire_submitter(args):
                             '''#\n# number of fire pixels: {}\n''' \
                             '''#'''.format(basename(old_output_file), history_string, nfire)
 
-                        nc_file_obj.close()
-
+                        LOG.info("\tWriting output text file {}".format(output_txt_file))
                         txt_file_obj = file(output_txt_file, 'w')
 
                         try:
@@ -320,7 +324,6 @@ def afire_submitter(args):
                             LOG.warning("\tProblem writing Active fire text file: {}".format(
                                 output_txt_file))
                             LOG.warn(traceback.format_exc())
-
 
             except Exception:
                 rc_problem = 1
