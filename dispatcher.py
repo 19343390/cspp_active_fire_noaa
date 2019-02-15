@@ -193,7 +193,7 @@ def afire_submitter(args):
                     # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = h5_file_obj.attrs['FirePix'][0]
                     if int(nfire) > 0:
-                        fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_Rad13', 'FP_confidence',
+                        fire_datasets = ['FP_latitude', 'FP_longitude', 'FP_T4', 'FP_confidence',
                                          'FP_power']
                         fire_data = []
                         for dset in fire_datasets:
@@ -221,7 +221,7 @@ def afire_submitter(args):
                             '''#\n''' \
                             '''# column 1: latitude of fire pixel (degrees)\n''' \
                             '''# column 2: longitude of fire pixel (degrees)\n''' \
-                            '''# column 3: M13 radiance of fire pixel (W/(m^2*sr*μm))\n''' \
+                            '''# column 3: I04 brightness temperature of fire pixel (K)\n''' \
                             '''# column 4: Along-scan fire pixel resolution (km)\n''' \
                             '''# column 5: Along-track fire pixel resolution (km)\n''' \
                             '''# column 6: detection confidence (%)\n''' \
