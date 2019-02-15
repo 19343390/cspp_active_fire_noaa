@@ -198,7 +198,12 @@ def afire_submitter(args):
                         fire_data = []
                         for dset in fire_datasets:
                             fire_data.append(h5_file_obj['/'+dset][:])
+
+                        # Multiply 'FP_confidence' by 10 to convert to a percent confidence...
+                        fire_data[3] *= 10
+
                     h5_file_obj.close()
+
 
                     # Check if there are any fire pixels, and write the associated fire data to
                     # a text file...
