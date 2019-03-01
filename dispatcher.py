@@ -199,9 +199,6 @@ def afire_submitter(args):
                         for dset in fire_datasets:
                             fire_data.append(h5_file_obj['/'+dset][:])
 
-                        # Multiply 'FP_confidence' by 10 to convert to a percent confidence...
-                        fire_data[3] *= 10
-
                     h5_file_obj.close()
 
 
@@ -229,7 +226,7 @@ def afire_submitter(args):
                             '''# column 3: I04 brightness temperature of fire pixel (K)\n''' \
                             '''# column 4: Along-scan fire pixel resolution (km)\n''' \
                             '''# column 5: Along-track fire pixel resolution (km)\n''' \
-                            '''# column 6: detection confidence (%)\n''' \
+                            '''# column 6: detection confidence ([7,8,9]->[lo,med,hi])\n''' \
                             '''# column 7: fire radiative power (MW)\n''' \
                             '''#\n# number of fire pixels: {}\n''' \
                             '''#'''.format(basename(old_output_file), history_string, nfire)
