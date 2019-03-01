@@ -14,6 +14,7 @@ Licensed under GNU GPLv3.
 """
 
 import os
+import sys
 from os.path import basename, dirname, curdir, abspath, isdir, isfile, exists, splitext, join as pjoin
 import logging
 #import time
@@ -21,13 +22,13 @@ import re
 from glob import glob
 import string
 import numpy as np
+import traceback
 from datetime import datetime
 import h5py
 
 from unaggregate import find_aggregated, unaggregate_inputs
 
 LOG = logging.getLogger('active_fire_interface')
-
 
 def get_granule_ID(IET_StartTime):
     """
@@ -68,74 +69,6 @@ def get_granule_ID(IET_StartTime):
 
     return N_Granule_ID
 
-
-def get_granule_id_from_file(filename, pattern, epoch, leapsec_dt_list, read_file=False):
-    '''
-    Computes a datetime object from "filename" using the regex "pattern", and determines the
-    elapsed time since "epoch".
-    '''
-    # Compile the regular expression for the filename...
-    re_pattern = re.compile(pattern)
-
-    # Get some information based on the filename
-    file_basename = basename(filename)
-    LOG.debug("file_basename = {}".format(file_basename))
-    pattern_match = re_pattern.match(file_basename)
-    if pattern_match is not None:
-        file_info = dict(pattern_match.groupdict())
-    else:
-        return None, None, None, None
-    LOG.debug("file_info = {}".format(file_info))
-
-    # Determine the granule time info...
-    dt_string = "{}_{}".format(file_info['date'], file_info['start_time'])
-    LOG.debug("dt_string = {}".format(dt_string))
-    dt = datetime.strptime(dt_string, "%Y%m%d_%H%M%S%f")
-    LOG.debug("dt = {}".format(dt))
-    leap_seconds = int(get_leapseconds(leapsec_dt_list, dt))
-    LOG.debug("leap_seconds = {}".format(leap_seconds))
-
-    is_aggregated = False
-
-    if read_file:
-        try:
-            # Open the file and get the collection short name
-            file_obj = h5py.File(filename, 'r')
-            grp_obj = file_obj['/Data_Products']
-            collection_short_name = grp_obj.keys()[0]
-
-            # Determine whether this is an aggregated granule...
-            agg_group_name = '/Data_Products/{0:}/{0:}_Aggr'.format(collection_short_name)
-            grp_obj = file_obj[agg_group_name]
-            num_grans = grp_obj.attrs['AggregateNumberGranules'][0][0]
-            is_aggregated = True if num_grans > 1 else False
-
-            # Get the IET and granule ID...
-            gran_group_name = '/Data_Products/{0:}/{0:}_Gran_0'.format(collection_short_name)
-            grp_obj = file_obj[gran_group_name]
-            iet_time = grp_obj.attrs['N_Beginning_Time_IET'][0][0]
-            granule_id = grp_obj.attrs['N_Granule_ID'][0][0]
-
-            file_obj.close()
-        except IOError, err:
-            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
-            LOG.error("{}, aborting...".format(err))
-            granule_id = None
-        except Exception, err:
-            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
-            LOG.error("{}, aborting...".format(err))
-            file_obj.close()
-            granule_id = None
-    else:
-        iet_time = int(((dt - epoch).total_seconds() + leap_seconds) * 1000000.)
-        LOG.debug("iet_time = {}".format(iet_time))
-        granule_id = get_granule_ID(iet_time)
-
-    LOG.debug("is_aggregated = {}".format(is_aggregated))
-
-    return granule_id, file_info, dt, is_aggregated
-
-
 def get_leapsec_table(leapsecond_dir):
     '''
     Read the IETTime.dat file containing the leap seconds since 1972, and save into a list of dicts.
@@ -164,7 +97,6 @@ def get_leapsec_table(leapsecond_dir):
 
     return leapsec_dt_list
 
-
 def get_leapseconds(leapsec_table, dt):
     '''
     Compares a datetime object to those in a table, and returns the correct number
@@ -182,22 +114,201 @@ def get_leapseconds(leapsec_table, dt):
 
     return leap_seconds
 
+def get_file_info(filename, afire_options, read_file=False):
+    '''
+    Computes a datetime object from "filename" using the regex "pattern", and determines the
+    elapsed time since "epoch".
+    '''
+    # The re defining the fields of an NPP CDFCB-format filename
+    RE_NPP_list = ['(?P<kind>[A-Z]+)(?P<band>[0-9]*)_',
+                   '(?P<sat>[A-Za-z0-9]+)_', 'd(?P<date>\d+)_',
+                   't(?P<start_time>\d+)_',
+                   'e(?P<end_time>\d+)_b(?P<orbit>\d+)_',
+                   'c(?P<created_time>\d+)_',
+                   '(?P<site>[a-zA-Z0-9]+)_',
+                   '(?P<domain>[a-zA-Z0-9]+)\.h5']
+    pattern = "".join(RE_NPP_list)
 
-def generate_file_list(inputs, afire_options, full=False):
+    # Get a table of the leap seconds
+    iet_epoch = datetime(1958, 1, 1)
+    leapsec_dt_list = get_leapsec_table(afire_options['ancil_dir'])
+
+    # Compile the regular expression for the filename...
+    re_pattern = re.compile(pattern)
+
+    # Get some information based on the filename
+    file_basename = basename(filename)
+    pattern_match = re_pattern.match(file_basename)
+    if pattern_match is not None:
+        file_info = dict(pattern_match.groupdict())
+    else:
+        return None, None, None, None
+
+    # Determine the granule time info...
+    dt_string = "{}_{}".format(file_info['date'], file_info['start_time'])
+    dt = datetime.strptime(dt_string, "%Y%m%d_%H%M%S%f")
+    leap_seconds = int(get_leapseconds(leapsec_dt_list, dt))
+
+    is_aggregated = False
+    agg_granule_IDs = []
+    agg_iet_times = []
+
+    if read_file:
+        try:
+            # Open the file and get the collection short name
+            file_obj = h5py.File(filename, 'r')
+            grp_obj = file_obj['/Data_Products']
+            collection_short_name = grp_obj.keys()[0]
+
+            # Determine whether this is an aggregated granule...
+            agg_group_name = '/Data_Products/{0:}/{0:}_Aggr'.format(collection_short_name)
+            grp_obj = file_obj[agg_group_name]
+            num_grans = grp_obj.attrs['AggregateNumberGranules'][0][0]
+            is_aggregated = True if num_grans > 1 else False
+
+            # Get the IET and granule ID...
+            LOG.debug('\t\tThere are {} granules in this file...'.format(num_grans))
+            for granule in range(num_grans):
+                gran_group_name = '/Data_Products/{0:}/{0:}_Gran_{1:}'.format(
+                        collection_short_name, granule)
+                grp_obj = file_obj[gran_group_name]
+                agg_iet_times.append(grp_obj.attrs['N_Beginning_Time_IET'][0][0])
+                agg_granule_IDs.append(grp_obj.attrs['N_Granule_ID'][0][0])
+
+            file_obj.close()
+        except IOError, err:
+            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
+            LOG.debug(traceback.format_exc())
+            LOG.error("<<{}>>, aborting...".format(err))
+            granule_id = []
+        except Exception, err:
+            LOG.error("Reading of iet/granule_id failed for {}".format(filename))
+            LOG.debug(traceback.format_exc())
+            LOG.error("<<{}>>, aborting...".format(err))
+            file_obj.close()
+            granule_id = []
+    else:
+        iet_time = int(((dt - iet_epoch).total_seconds() + leap_seconds) * 1000000.)
+        granule_id = get_granule_ID(iet_time)
+
+    return file_info, dt, is_aggregated, agg_granule_IDs, agg_iet_times
+
+
+def inventory_files(input_files, afire_options, data_dict={}):
+    '''
+    Loop through the input files, and determine their granule ids
+    '''
+
+    # Set the required granule ID scheme...
+    read_file = True
+
+    if input_files == []:
+        LOG.debug('\t\tNo input files')
+
+    for input_file in input_files:
+        LOG.debug("\t\tinput file: {}".format(input_file))
+
+        file_info, dt, is_aggregated, granule_ids, iet_times = get_file_info(
+                input_file, afire_options, read_file=read_file)
+
+        if granule_ids == []:
+            continue
+
+        granule_id = sorted(granule_ids)[0]
+        kind_key = '{}{}'.format(file_info['kind'], file_info['band'])
+
+        LOG.debug("\t\tinput file granule_id = {}".format(granule_id))
+        LOG.debug("\t\tinput file kind_key = {}".format(kind_key))
+
+        try:
+            # If an entry for this granule ID already exists
+            if kind_key in data_dict[granule_id].keys():
+                LOG.debug("\t\tdata_dict['{}']['{}'] has already been created!".format(granule_id, kind_key))
+                LOG.debug("\t\t\tExisting entry: is_aggregated = {}, with {} granules".format(
+                    data_dict[granule_id][kind_key]['is_aggregated'],
+                    len(data_dict[granule_id][kind_key]['granule_ids'])))
+                LOG.debug("\t\t\tNew entry: is_aggregated = {}, with {} granules".format(
+                    is_aggregated, len(granule_ids)))
+
+                if len(granule_ids) <= len(data_dict[granule_id][kind_key]['granule_ids']):
+                    LOG.debug("\t\t\t...skipping this granule ID.")
+                    continue
+                else:
+                    LOG.debug("\t\t\t...overwriting this granule ID.")
+
+            data_dict[granule_id][kind_key] = file_info
+
+        except KeyError:
+            LOG.debug("\t\tEntry for granule ID {} does not yet exist, creating...".format(
+                granule_id))
+            data_dict[granule_id] = {}
+            data_dict[granule_id][kind_key] = file_info
+
+        data_dict[granule_id][kind_key]['file'] = input_file
+        data_dict[granule_id][kind_key]['dt'] = dt
+        data_dict[granule_id][kind_key]['is_aggregated'] = is_aggregated
+        data_dict[granule_id][kind_key]['granule_id'] = granule_id
+        data_dict[granule_id][kind_key]['granule_ids'] = granule_ids
+
+    return data_dict
+
+def inventory_dirs(input_dirs, afire_options):
+    '''
+    Loop through the input directories, find any files matching the required patterns, and
+    determine their granule ids
+    '''
+
+    # Loop through the input dirs and record any desired files in any of these directories
+
+    data_dict = {}
+
+    if input_dirs == []:
+        LOG.debug('\t\tNo input directories')
+
+    input_prefixes = afire_options['input_prefixes']
+
+    for dirs in input_dirs:
+        LOG.debug("\tchecking directory for files: {}".format(dirs))
+        for input_prefix in input_prefixes:
+            input_glob = '{}*.h5'.format(input_prefix)
+            input_glob = pjoin(dirs, input_glob)
+            input_files = sorted(glob(input_glob))
+            LOG.debug('')
+            LOG.debug("\t\t>>> {} files in this dir:".format(basename(input_glob)))
+            for input_file in input_files:
+                LOG.debug('\t\t\t{}'.format(input_file))
+
+            data_dict = inventory_files(input_files, afire_options, data_dict=data_dict)
+
+    return data_dict
+
+def show_dict(data_dict, dict_name='data_dict', leader=''):
+    '''
+    Print out the contents of a dictionary keyed by granule ID and then file "kind".
+    '''
+    if data_dict == {}:
+        LOG.debug('{}>>> {} = {{}}'.format(leader, dict_name))
+    else:
+        for granule_id in sorted(data_dict.keys()):
+            LOG.debug('{}>>> {}[{}]: '.format(leader, dict_name, granule_id))
+            for kind in sorted(data_dict[granule_id].keys()):
+                LOG.debug('{}\t[{}]: '.format(leader, kind))
+                for key in data_dict[granule_id][kind].keys():
+                    LOG.debug('{}\t\t{} :{} '.format(leader, key, data_dict[granule_id][kind][key]))
+
+def generate_file_dict(inputs, afire_options, full=False):
     '''
     Trawl through the files and directories given at the command line, pick out those matching the
-    desired file types, and attach them to a master list of raw data files. This list need not be
-    sorted into time order.
+    desired file types, and construct a master dictionary addressed by granule ID and prefix type.
     '''
 
     input_files = []
 
     for input in inputs:
-        LOG.debug("bash glob input = {}".format(input))
+        LOG.debug("\tbash glob input = {}".format(input))
 
     if full:
-        input_files = list(set(inputs))
-        input_files.sort()
+        input_files = sorted(list(set(inputs)))
         return input_files
 
     m_band_prefixes = ['GMTCO', 'SVM05', 'SVM07', 'SVM11', 'SVM13', 'SVM15', 'SVM16']
@@ -215,157 +326,159 @@ def generate_file_list(inputs, afire_options, full=False):
         input = abspath(os.path.expanduser(input))
         if isdir(input):
             # Input file glob is of form "/path/to/files"
-            LOG.debug("Input {} is a directory containing files...".format(input))
+            LOG.debug("\tInput {} is a directory containing files...".format(input))
             input_dirs.append(input)
         elif isfile(input):
             # Input file glob is of form "/path/to/files/goes13_1_2015_143_1745.input"
-            LOG.debug("Input {} is a file.".format(input))
+            LOG.debug("\tInput {} is a file.".format(input))
             input_files.append(input)
 
-    input_dirs = list(set(input_dirs))
-    input_dirs.sort()
-    input_files = list(set(input_files))
-    input_files.sort()
+    input_dirs = sorted(list(set(input_dirs)))
+    input_files = sorted(list(set(input_files)))
 
     for dirs in input_dirs:
-        LOG.debug("input dirs {}".format(dirs))
+        LOG.debug("\tinput dirs {}".format(dirs))
     for files in input_files:
-        LOG.debug("input files {}".format(files))
+        LOG.debug("\tinput files {}".format(files))
 
-    # The re defining the fields of an NPP CDFCB-format filename
-    RE_NPP_list = ['(?P<kind>[A-Z]+)(?P<band>[0-9]*)_',
-                   '(?P<sat>[A-Za-z0-9]+)_', 'd(?P<date>\d+)_',
-                   't(?P<start_time>\d+)_',
-                   'e(?P<end_time>\d+)_b(?P<orbit>\d+)_',
-                   'c(?P<created_time>\d+)_',
-                   '(?P<site>[a-zA-Z0-9]+)_',
-                   '(?P<domain>[a-zA-Z0-9]+)\.h5']
-    RE_NPP_str = "".join(RE_NPP_list)
+    # Inventory the input files explicitly obtained from the command line.
 
-    # Get a table of the leap seconds
-    iet_epoch = datetime(1958, 1, 1)
-    LOG.debug("Epoch time: {}".format(iet_epoch))
-    leapsec_dt_list = get_leapsec_table(afire_options['ancil_dir'])
+    LOG.debug('')
+    LOG.debug('>>> Checking explicit input files...')
+    LOG.debug('')
 
-    # Set the required granule ID scheme...
-    read_file = True
+    explicit_input_file_dict = inventory_files(input_files, afire_options)
+    explicit_input_file_granule_ids = []
+    LOG.debug('')
 
-    # Loop through the input dirs and record any desired files in any of these directories
+    show_dict(explicit_input_file_dict, dict_name='explicit_input_file_dict', leader='')
 
+    for granule_id in explicit_input_file_dict.keys():
+        for kind in explicit_input_file_dict[granule_id].keys():
+            explicit_input_file_granule_ids += explicit_input_file_dict[granule_id][kind]['granule_ids']
+
+    explicit_input_file_granule_ids = sorted(list(set(explicit_input_file_granule_ids)))
+    LOG.debug('\t>>> explicit_input_file_granule_ids = {}: '.format(explicit_input_file_granule_ids))
+
+    # Inventory the input files implicitly obtained by virtue of being in the same directory as the
+    # explicitly obtained input files.
+
+    LOG.debug('')
+    LOG.debug('>>> Checking implicit input directories for any valid input files...')
+    LOG.debug('')
+
+    implicit_dirs = [[dirname(explicit_input_file_dict[granule_id][kind]['file'])
+                        for kind in explicit_input_file_dict[granule_id].keys()]
+                            for granule_id in explicit_input_file_dict.keys()]
+    implicit_dirs =  sorted(list(set([x[0] for x in implicit_dirs])))
+    LOG.debug('\timplicit dirs: {}'.format(implicit_dirs))
+    LOG.debug('')
+    implicit_input_dir_dict = inventory_dirs(implicit_dirs, afire_options)
+    implicit_input_dir_granule_ids = []
+    LOG.debug('')
+
+    show_dict(implicit_input_dir_dict, dict_name='implicit_input_dir_dict', leader='')
+
+    for granule_id in sorted(implicit_input_dir_dict.keys()):
+        for kind in sorted(implicit_input_dir_dict[granule_id].keys()):
+            implicit_input_dir_granule_ids += implicit_input_dir_dict[granule_id][kind]['granule_ids']
+
+    implicit_input_dir_granule_ids = sorted(list(set(implicit_input_dir_granule_ids)))
+    LOG.debug('\t>>> implicit_input_dir_granule_ids = {}: '.format(implicit_input_dir_granule_ids))
+
+    # Inventory the input directories explicitly obtained from the command line.
+
+    LOG.debug('')
+    LOG.debug('>>> Checking explicit input directories for any valid input files...')
+    LOG.debug('')
+
+    explicit_dirs =  input_dirs
+
+    LOG.debug('\texplicit dirs: {}'.format(explicit_dirs))
+    LOG.debug('')
+    explicit_input_dir_dict = inventory_dirs(explicit_dirs, afire_options)
+    explicit_input_dir_granule_ids = []
+    LOG.debug('')
+
+    show_dict(explicit_input_dir_dict, dict_name='explicit_input_dir_dict', leader='')
+
+    for granule_id in sorted(explicit_input_dir_dict.keys()):
+        for kind in sorted(explicit_input_dir_dict[granule_id].keys()):
+            explicit_input_dir_granule_ids += explicit_input_dir_dict[granule_id][kind]['granule_ids']
+
+    explicit_input_dir_granule_ids = sorted(list(set(explicit_input_dir_granule_ids)))
+    LOG.debug('\t>>> explicit_input_dir_granule_ids = {}: '.format(explicit_input_dir_granule_ids))
+
+    LOG.debug('')
+    LOG.debug('\t>>> explicit_input_file_granule_ids = {}: '.format(explicit_input_file_granule_ids))
+    LOG.debug('\t>>> implicit_input_dir_granule_ids =  {}: '.format(implicit_input_dir_granule_ids))
+    LOG.debug('\t>>> explicit_input_dir_granule_ids =  {}: '.format(explicit_input_dir_granule_ids))
+    LOG.debug('')
+
+    # Determine the allowed granule IDs...
+
+    allowed_granule_ids = sorted(list(set(explicit_input_file_granule_ids
+                                          + explicit_input_dir_granule_ids)))
+    LOG.debug('\t>>> allowed_granule_ids = {}: '.format(allowed_granule_ids))
+    LOG.debug('')
+
+    # Find the aggregated files, and return the input dict with those files removed
+    LOG.debug('\tChecking for aggregated files from explicit input files...')
+    explicit_agg_input_files, explicit_input_file_dict = find_aggregated(explicit_input_file_dict)
+    LOG.debug('\tChecking for aggregated files from implicit input files...')
+    implicit_agg_input_dir_files, implicit_input_dir_dict = find_aggregated(implicit_input_dir_dict)
+    LOG.debug('\tChecking for aggregated files from explicit input dirs...')
+    explicit_agg_input_dir_files, explicit_input_dir_dict = find_aggregated(explicit_input_dir_dict)
+
+    # Initialise the data dictionary...
     data_dict = {}
-    for dirs in input_dirs:
-        for input_prefix in input_prefixes:
-            input_glob = '{}*.h5'.format(input_prefix)
-            input_glob = pjoin(dirs, input_glob)
-            LOG.debug("input glob is {}".format(input_glob))
-            temp_input_files = glob(input_glob)
-            temp_input_files.sort()
-            LOG.debug("temp_input_files {}".format(temp_input_files))
+    data_dict.update(explicit_input_file_dict)
+    data_dict.update(implicit_input_dir_dict)
+    data_dict.update(explicit_input_dir_dict)
 
-            for temp_input_file in temp_input_files:
+    # Handle the aggregated files
+    agg_input_files = sorted(list(set(
+        explicit_agg_input_files + implicit_agg_input_dir_files + explicit_agg_input_dir_files)))
+    LOG.debug('')
+    LOG.debug('\tagg_input_files = {}'.format(agg_input_files))
 
-                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(
-                    temp_input_file, RE_NPP_str,
-                    iet_epoch, leapsec_dt_list, read_file=read_file)
+    if agg_input_files != []:
 
-                if granule_id is None:
-                    continue
+        # De-aggregate the aggregated files, and return the directory where the de-aggregated
+        # files are...
+        LOG.debug('\tDe-aggregating aggregated files...')
+        afire_home = afire_options['afire_home']
+        unagg_inputs_dir = unaggregate_inputs(afire_home, agg_input_files, afire_options)
 
-                LOG.debug("granule_id = {}".format(granule_id))
+        # Create a list of dicts containing valid inputs, from the de-aggregated files
+        afire_unagg_data_dict = inventory_dirs([unagg_inputs_dir], afire_options)
 
-                kind_key = '{}{}'.format(file_info['kind'], file_info['band'])
-                try:
-                    data_dict[granule_id][kind_key] = file_info
-                except KeyError:
-                    LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(
-                        granule_id))
-                    data_dict[granule_id] = {}
-                    data_dict[granule_id][kind_key] = file_info
+        LOG.debug('\tDe-aggregated data dict...')
+        show_dict(afire_unagg_data_dict, dict_name='afire_unagg_data_dict', leader='')
 
-                data_dict[granule_id][kind_key]['file'] = temp_input_file
-                data_dict[granule_id][kind_key]['dt'] = dt
-                data_dict[granule_id][kind_key]['is_aggregated'] = is_aggregated
+        LOG.debug('\tCombined data dicts (with aggregated files removed)...')
+        show_dict(data_dict, dict_name='data_dict', leader='')
 
-    # Loop through the input files, determine their dirs, and sweep up the files in those dirs
-    # that share granule ids with the command line inputs.
+        # Update the main data_dict with the aggregated files
+        #for granule_id in allowed_granule_ids:
+            #data_dict[granule_id].update(afire_unagg_data_dict[granule_id])
+        for granule_id in sorted(afire_unagg_data_dict.keys()):
+            if granule_id in data_dict.keys():
+                data_dict[granule_id].update(afire_unagg_data_dict[granule_id])
+            else:
+                data_dict[granule_id] = afire_unagg_data_dict[granule_id]
 
-    # Get the granule ids of the files given in the input
-    granule_id_from_files = []
+        LOG.debug('\tCombined data dicts (with de-aggregated files)...')
+        show_dict(data_dict, dict_name='data_dict', leader='')
 
-    for input_file in input_files:
-        LOG.debug("input file: {}".format(input_file))
-
-        granule_id, _, _, is_aggregated = get_granule_id_from_file(
-            input_file, RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
-
-        if granule_id is None:
-            continue
-
-        LOG.debug("granule_id = {}".format(granule_id))
-        granule_id_from_files.append(granule_id)
-
-    granule_id_from_files = list(set(granule_id_from_files))
-    granule_id_from_files.sort()
-
-    for granule_id in granule_id_from_files:
-        LOG.debug("granule_id from files: {}".format(granule_id))
-
-    # Loop through the input files and determine the dirs in which they are contained
-    input_dirs_from_files = []
-    for input_file in input_files:
-        input_dirs_from_files.append(dirname(input_file))
-
-    input_dirs_from_files = list(set(input_dirs_from_files))
-    input_dirs_from_files.sort()
-
-    for dirs in input_dirs_from_files:
-        LOG.debug("input dirs from files: {}".format(dirs))
-
-    # Have any of the input dirs from the file inputs already been covered by the dir inputs?
-    # If yes, remove the dupes.
-    LOG.debug("original input dirs from files: {}".format(input_dirs_from_files))
-    for dirs in input_dirs_from_files:
-        if dirs in input_dirs:
-            LOG.debug("input dirs from files '{}' already in input_dirs".format(dirs, input_dirs))
-            input_dirs_from_files = filter(lambda x: x != dirs, input_dirs_from_files)
-
-    LOG.debug("filtered input dirs from files: {}".format(input_dirs_from_files))
-
-    for dirs in input_dirs_from_files:
-        for input_prefix in input_prefixes:
-            input_glob = '{}*.h5'.format(input_prefix)
-            input_glob = pjoin(dirs, input_glob)
-            LOG.debug("input glob is {}".format(input_glob))
-            temp_input_files = glob(input_glob)
-            temp_input_files.sort()
-            LOG.debug("temp_input_files {}".format(temp_input_files))
-
-            for temp_input_file in temp_input_files:
-
-                granule_id, file_info, dt, is_aggregated = get_granule_id_from_file(
-                    temp_input_file, RE_NPP_str, iet_epoch, leapsec_dt_list, read_file=read_file)
-
-                if granule_id is None:
-                    continue
-
-                LOG.debug("granule_id = {}".format(granule_id))
-
-                if granule_id in granule_id_from_files:
-                    kind_key = '{}{}'.format(file_info['kind'], file_info['band'])
-                    try:
-                        data_dict[granule_id][kind_key] = file_info
-                    except KeyError:
-                        LOG.debug("Entry for granule ID {} does not yet exist, creating...".format(
-                            granule_id))
-                        data_dict[granule_id] = {}
-                        data_dict[granule_id][kind_key] = file_info
-
-                    data_dict[granule_id][kind_key]['file'] = temp_input_file
-                    data_dict[granule_id][kind_key]['dt'] = dt
-                    data_dict[granule_id][kind_key]['is_aggregated'] = is_aggregated
+    # Remove disallowed granule IDs from the dicts
+        LOG.debug('\t>>> Removing disallowed granule IDs from data_dict...')
+    for granule_id in sorted(data_dict.keys()):
+        if granule_id not in allowed_granule_ids:
+            LOG.debug('\t\tRemoving granule ID {}'.format(granule_id))
+            data_dict.pop(granule_id)
 
     return data_dict
-
 
 def get_afire_inputs(inputs, afire_options):
     '''
@@ -376,37 +489,17 @@ def get_afire_inputs(inputs, afire_options):
     afire_home = afire_options['afire_home']
 
     # Create a list of dicts containing valid inputs, which may include aggregated files
-    afire_data_dict = generate_file_list(inputs, afire_options)
-    granule_id_list = afire_data_dict.keys()
-    granule_id_list.sort()
-
-    # Find the aggregated files...
-    agg_input_files = find_aggregated(afire_data_dict)
-    granule_id_list = afire_data_dict.keys()
-    granule_id_list.sort()
-    LOG.debug('agg_input_files = {}'.format(agg_input_files))
-
-    if agg_input_files != []:
-
-        # Unaggregate the aggregated files, and return the directory where the unaggregated
-        # files are...
-        unagg_inputs_dir = unaggregate_inputs(afire_home, agg_input_files, afire_options)
-
-        afire_unagg_data_dict = generate_file_list([unagg_inputs_dir], afire_options)
-        granule_id_unagg_list = afire_unagg_data_dict.keys()
-        granule_id_unagg_list.sort()
-
-        # Combine the two data dicts...
-        afire_data_dict.update(afire_unagg_data_dict)
-        granule_id_list = afire_data_dict.keys()
-        granule_id_list.sort()
+    LOG.debug('Creating master list of files...')
+    afire_data_dict = generate_file_dict(inputs, afire_options)
+    granule_id_list = sorted(afire_data_dict.keys())
 
     # Loop through the granule IDs and make sure that each one has a complete set of valid inputs.
+    LOG.debug('Constructing valid sets of inputs...')
     bad_granule_id = []
     for granule_id in granule_id_list:
         LOG.debug('Checking granule_id {}...'.format(granule_id))
         missing_prefixes = []
-        for prefix in afire_options['input_prefixes']:
+        for prefix in sorted(afire_options['input_prefixes']):
             LOG.debug('\tChecking prefix {}...'.format(prefix))
             try:
                 LOG.debug('\t\tafire_data_dict["{}"]["{}"] = {}'.format(
@@ -426,7 +519,6 @@ def get_afire_inputs(inputs, afire_options):
 
     return afire_data_dict, granule_id_list
 
-
 def construct_cmd_invocations(afire_data_dict, afire_options):
     '''
     Take the list inputs, and construct the required command line invocations. Commands are of the
@@ -444,8 +536,7 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
     750m resolution.
     '''
 
-    granule_id_list = afire_data_dict.keys()
-    granule_id_list.sort()
+    granule_id_list = sorted(afire_data_dict.keys())
 
     geo_prefix = 'GITCO' if afire_options['i_band'] else 'GMTCO'
     lwm_prefix = 'GRLWM'

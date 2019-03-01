@@ -31,34 +31,34 @@ def find_aggregated(data_dict):
 
     aggregated_list = []
 
-    for granule_id in data_dict.keys():
-        for kind in data_dict[granule_id].keys():
+    for granule_id in sorted(data_dict.keys()):
+        for kind in sorted(data_dict[granule_id].keys()):
             try:
                 if data_dict[granule_id][kind]['is_aggregated']:
                     aggregated_list.append(data_dict[granule_id][kind]['file'])
-                    LOG.debug("Removing entry '{}' from input dictionary granule ID {}".format(
+                    LOG.debug("\t\tRemoving entry '{}' from input dictionary granule ID {}".format(
                         kind, granule_id))
                     del(data_dict[granule_id][kind])
                 else:
                     pass
             except:
-                LOG.warn("Unable to remove entry '{}' from input dictionary granule ID {}".format(
+                LOG.warn("\t\tUnable to remove entry '{}' from input dictionary granule ID {}".format(
                     kind, granule_id))
                 LOG.debug(traceback.format_exc())
 
             try:
                 if data_dict[granule_id] == {}:
-                    LOG.debug("Removing empty dictionary for granule ID '{}'...".format(granule_id))
+                    LOG.debug("\t\tRemoving empty dictionary for granule ID '{}'...".format(granule_id))
                     del(data_dict[granule_id])
                 else:
                     pass
             except:
-                LOG.warn("Unable to remove empty dictionary for granule ID '{}'".format(granule_id))
+                LOG.warn("\t\tUnable to remove empty dictionary for granule ID '{}'".format(granule_id))
                 LOG.debug(traceback.format_exc())
 
-    aggregated_list.sort()
+    aggregated_list = sorted(aggregated_list)
 
-    return aggregated_list
+    return aggregated_list, data_dict
 
 
 def nagg_submitter(args):

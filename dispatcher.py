@@ -207,7 +207,7 @@ def afire_submitter(args):
 
                     # Check if there are any fire pixels, and write the associated fire data to
                     # a text file...
-                    
+
                     LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
 
                     if int(nfire) > 0:
@@ -270,7 +270,7 @@ def afire_submitter(args):
                     setattr(nc_file_obj, 'history', history_string)
                     setattr(nc_file_obj, 'Metadata_Link', basename(old_output_file))
                     setattr(nc_file_obj, 'id', getURID(creation_dt)['URID'])
-                
+
                     # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = len(nc_file_obj['Fire Pixels'].dimensions['nfire'])
                     if int(nfire) > 0:
@@ -283,7 +283,7 @@ def afire_submitter(args):
 
                     # Check if there are any fire pixels, and write the associated fire data to
                     # a text file...
-                    
+
                     LOG.info("\tGranule {} has {} fire pixels".format(granule_id, nfire))
 
                     if int(nfire) > 0:
@@ -371,8 +371,7 @@ def afire_dispatcher(afire_home, afire_data_dict, afire_options):
     """
 
     # Construct a list of task dicts...
-    granule_id_list = afire_data_dict.keys()
-    granule_id_list.sort()
+    granule_id_list = sorted(afire_data_dict.keys())
     afire_tasks = []
     for granule_id in granule_id_list:
         args = {'granule_dict': afire_data_dict[granule_id],

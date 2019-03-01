@@ -49,9 +49,12 @@ def configure_logging(level=logging.WARNING, FILE=None):
     #fm = logging.Formatter('(%(levelname)s):%(filename)s:%(funcName)s:%(lineno)d:%(message)s')
 
     if level == logging.DEBUG:
+        #fm = logging.Formatter(
+            #'%(asctime)s.%(msecs)03d (%(levelname)7s) : %(filename)25s : %(funcName)25s :' +
+            #'%(lineno)4d : %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         fm = logging.Formatter(
-            '%(asctime)s.%(msecs)03d (%(levelname)s) : %(filename)s : %(funcName)s :' +
-            '%(lineno)d:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            '(%(levelname)7s) : %(filename)25s : %(funcName)25s :' +
+            '%(lineno)4d : %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     else:
         fm = logging.Formatter('%(asctime)s.%(msecs)03d (%(levelname)s) : %(message)s',
                                datefmt='%Y-%m-%d %H:%M:%S')
