@@ -115,15 +115,10 @@ def process_afire_inputs(work_dir, afire_options):
         if rc_problem_dict[granule_id] != 0:
             problem_runs.append(granule_id)
 
-    attempted_runs = list(set(attempted_runs))
-    successful_runs = list(set(successful_runs))
-    crashed_runs = list(set(crashed_runs))
-    problem_runs = list(set(problem_runs))
-
-    attempted_runs.sort()
-    successful_runs.sort()
-    crashed_runs.sort()
-    problem_runs.sort()
+    attempted_runs = sorted(list(set(attempted_runs)))
+    successful_runs = sorted(list(set(successful_runs)))
+    crashed_runs = sorted(list(set(crashed_runs)))
+    problem_runs = sorted(list(set(problem_runs)))
 
     return attempted_runs, successful_runs, crashed_runs, problem_runs
 

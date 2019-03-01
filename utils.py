@@ -741,8 +741,7 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
     anc_file_pattern = "".join(anc_file_pattern)
     re_anc_file_pattern = re.compile(anc_file_pattern)
 
-    afire_anc_dirs = glob(os.path.join(cache_dir, '*_*_*_*-*h'))
-    afire_anc_dirs.sort()
+    afire_anc_dirs = sorted(glob(os.path.join(cache_dir, '*_*_*_*-*h')))
 
     too_old_files = []
     future_files = []
@@ -751,8 +750,7 @@ def clean_cache(cache_dir, cache_time_window, granule_dt):
 
         LOG.debug('afire_anc_dir: {}'.format(afire_anc_dir))
 
-        afire_nc_files = glob(os.path.join(afire_anc_dir, 'GRLWM_*.nc'))
-        afire_nc_files.sort()
+        afire_nc_files = sorted(glob(os.path.join(afire_anc_dir, 'GRLWM_*.nc')))
         if afire_nc_files != []:
             LOG.debug('In {} :'.format(afire_anc_dir))
             LOG.debug(
