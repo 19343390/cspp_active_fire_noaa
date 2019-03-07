@@ -78,15 +78,15 @@ def get_leapsec_table(leapsecond_dir):
     month_enum = {item: idx for idx, item in enumerate(months, start=1)}
     leapsec_filename = pjoin(leapsecond_dir, 'IETTime.dat')
     try:
-        leapsec_file = open(leapsec_filename, "ro")  # Open template file for reading
-    except Exception, err:
+        leapsec_file = open(leapsec_filename, "r")  # Open template file for reading
+    except IOError as err:
         LOG.error("{}, aborting.".format(err))
 
     leapsec_dt_list = []
     for line in leapsec_file.readlines():
         line = line.replace("\n", "")
         fields = line.split(" ")
-        fields = filter(lambda x: x != '', fields)
+        fields = list(filter(lambda x: x != '', fields))
         year = int(fields[0])
         month = month_enum[fields[1]]
         day = int(fields[2])
@@ -158,7 +158,7 @@ def get_file_info(filename, afire_options, read_file=False):
             # Open the file and get the collection short name
             file_obj = h5py.File(filename, 'r')
             grp_obj = file_obj['/Data_Products']
-            collection_short_name = grp_obj.keys()[0]
+            collection_short_name = list(grp_obj.keys())[0]
 
             # Determine whether this is an aggregated granule...
             agg_group_name = '/Data_Products/{0:}/{0:}_Aggr'.format(collection_short_name)
@@ -173,15 +173,15 @@ def get_file_info(filename, afire_options, read_file=False):
                         collection_short_name, granule)
                 grp_obj = file_obj[gran_group_name]
                 agg_iet_times.append(grp_obj.attrs['N_Beginning_Time_IET'][0][0])
-                agg_granule_IDs.append(grp_obj.attrs['N_Granule_ID'][0][0])
+                agg_granule_IDs.append(grp_obj.attrs['N_Granule_ID'][0][0].decode())
 
             file_obj.close()
-        except IOError, err:
+        except IOError as err:
             LOG.error("Reading of iet/granule_id failed for {}".format(filename))
             LOG.debug(traceback.format_exc())
             LOG.error("<<{}>>, aborting...".format(err))
             granule_id = []
-        except Exception, err:
+        except Exception as err:
             LOG.error("Reading of iet/granule_id failed for {}".format(filename))
             LOG.debug(traceback.format_exc())
             LOG.error("<<{}>>, aborting...".format(err))

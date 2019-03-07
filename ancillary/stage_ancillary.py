@@ -20,7 +20,7 @@ from subprocess import call, check_call, CalledProcessError
 
 from utils import create_dir, execute_binary_captured_inject_io
 
-import GridIP
+import ancillary.GridIP as GridIP
 
 LOG = logging.getLogger('stage_ancillary')
 
@@ -108,7 +108,7 @@ def get_lwm(afire_options, granule_dict):
             try:
                 _ = nc_from_cdl(afire_options, granule_dict, lwm_file)
                 #shutil.copyfile(lwm_template_file, lwm_file)
-            except Exception, err:
+            except Exception as err:
                 LOG.error("Unable to copy the LWM template file {} to the cache file {}, aborting."
                           .format(lwm_template_file, lwm_file))
                 LOG.error(err)
@@ -117,8 +117,7 @@ def get_lwm(afire_options, granule_dict):
                 return 1, rc_dict, None
 
             # Get the Land Water Mask object
-            className = GridIP.classNames['VIIRS-GridIP-VIIRS-Lwm-Mod-Gran']
-            LandWaterMask = getattr(GridIP, className)(granule_dict, afire_options)
+            LandWaterMask = GridIP.LandWaterMask(granule_dict, afire_options)
 
             # Get the geolocation
             geo_rc = LandWaterMask.setGeolocationInfo()
