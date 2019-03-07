@@ -28,7 +28,7 @@ from netCDF4 import Dataset
 
 from utils import link_files, getURID, execution_time, execute_binary_captured_inject_io, cleanup
 
-from ancillary import get_lwm
+from ancillary.stage_ancillary import get_lwm
 
 LOG = logging.getLogger('dispatcher')
 
@@ -85,7 +85,7 @@ def afire_submitter(args):
         try:
             rc_ancil, rc_ancil_dict, lwm_file = get_lwm(afire_options, granule_dict)
             failed_ancillary = True if rc_ancil != 0 else False
-        except Exception, err:
+        except Exception as err:
             failed_ancillary = True
             LOG.warn('\tProblem generating LWM for granule_id {}'.format(granule_id))
             LOG.error(err)
@@ -181,14 +181,22 @@ def afire_submitter(args):
 
                     # FIXME: There is something screwey about the I-band outputs: they are NetCDF
                     #        files, but they can only be opened with h5py.
+                    # FIXME: https://github.com/h5py/h5py/issues/441
+                    #        There is an issue with h5py writing Unicode strings as attributes,
+                    #        so we need to a bit more ( *.encode('utf8') etc...) to get it to work.
+                    #        This issue is supposed to fixed, perhaps our version of h5py is too
+                    #        old...
                     h5_file_obj = h5py.File(old_output_file, "a")
-                    h5_file_obj.attrs.create('date_created', creation_dt.isoformat())
-                    h5_file_obj.attrs.create('granule_id', granule_id)
+                    h5_file_obj.attrs.create('date_created', [a.encode('utf8') for a in
+                        creation_dt.isoformat()] )
+                    h5_file_obj.attrs.create('granule_id', [a.encode('utf8') for a in granule_id])
                     history_string = 'CSPP Active Fires version: {}'.format(
                         afire_options['version'])
-                    h5_file_obj.attrs.create('history', history_string)
-                    h5_file_obj.attrs.create('Metadata_Link', basename(old_output_file))
-                    h5_file_obj.attrs.create('id', getURID(creation_dt)['URID'])
+                    h5_file_obj.attrs.create('history', [a.encode('utf8') for a in history_string])
+                    h5_file_obj.attrs.create('Metadata_Link', [a.encode('utf8') for a in
+                        basename(old_output_file)])
+                    h5_file_obj.attrs.create('id', [a.encode('utf8') for a in
+                        getURID(creation_dt)['URID']])
 
                     # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = h5_file_obj.attrs['FirePix'][0]
@@ -237,7 +245,7 @@ def afire_submitter(args):
                             os.remove(nasa_file)
 
                         LOG.info("\tWriting output text file {}".format(output_txt_file))
-                        txt_file_obj = file(output_txt_file, 'w')
+                        txt_file_obj = open(output_txt_file, 'x')
 
                         try:
                             txt_file_obj.write(txt_file_header + "\n")
@@ -308,7 +316,7 @@ def afire_submitter(args):
                             '''#'''.format(basename(old_output_file), history_string, nfire)
 
                         LOG.info("\tWriting output text file {}".format(output_txt_file))
-                        txt_file_obj = file(output_txt_file, 'w')
+                        txt_file_obj = open(output_txt_file, 'x')
 
                         try:
                             txt_file_obj.write(txt_file_header + "\n")

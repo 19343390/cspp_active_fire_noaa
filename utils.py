@@ -28,8 +28,8 @@ import uuid
 from subprocess import Popen, CalledProcessError, call, PIPE
 from datetime import datetime, timedelta
 from threading import Thread
-from Queue import Queue, Empty
-
+from queue import Queue, Empty
+from six import string_types
 
 LOG = logging.getLogger(__name__)
 
@@ -166,7 +166,8 @@ def check_and_convert_path(key, a_path, check_write=False):
     abs_locations = []
     if ":" in a_path:
         paths = a_path.split(":")
-    elif isinstance(a_path, types.StringTypes):
+        isinstance(s, string_types)
+    elif isinstance(a_path, string_types): 
         paths = [a_path]
     else:
         paths = a_path
@@ -427,7 +428,7 @@ def execute_binary_captured_inject_io(work_dir, cmd, err_dict, log_execution=Tru
             # Search stdout for exe error strings and pass them to the logger.
             for error_key in error_keys:
                 error_pattern = err_dict[error_key]['pattern']
-                if error_pattern in output_stdout:
+                if error_pattern in output_stdout.decode():
                     output_stdout = string.replace(output_stdout, "\n", "")
                     err_dict[error_key]['count'] += 1
 
@@ -603,7 +604,6 @@ else:
 #if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG) we don't want basicConfig anymore
 #    log_common.configure_logging(level=logging.DEBUG, FILE="testlog.log")
-
 
 def get_return_code(num_unpacking_problems, num_xml_files_to_process,
                     num_no_output_runs, noncritical_problem, environment_error):

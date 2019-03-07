@@ -22,8 +22,8 @@ from numpy.ctypeslib import ndpointer
 import h5py
 from netCDF4 import Dataset
 
-from Utils import findDatelineCrossings
-from Utils import index, find_lt, find_gt
+from .Utils import findDatelineCrossings
+from .Utils import index, find_lt, find_gt
 
 LOG = logging.getLogger('LandWaterMask')
 
@@ -90,7 +90,7 @@ class LandWaterMask():
 
             geo_file_obj.close()
 
-        except Exception, err:
+        except Exception as err:
             LOG.exception(err)
             LOG.exception("Problem opening geolocation file ({}), aborting.".format(geo_filename))
             geo_file_obj.close()
@@ -170,7 +170,7 @@ class LandWaterMask():
             # TODO : Use original HDF4 file which contains elevation and LWM.
             DEMobj = h5py.File(DEM_fileName, 'r')
             DEM_node = DEMobj['/demGRID/Data Fields/LandWater']
-        except Exception, err:
+        except Exception as err:
             LOG.exception(err)
             LOG.exception("Problem opening DEM file ({}), aborting.".format(DEM_fileName))
             return 1
@@ -242,7 +242,7 @@ class LandWaterMask():
             del(DEM_node)
             DEMobj.close()
 
-        except Exception, err:
+        except Exception as err:
 
             LOG.warning("EXCEPTION: {}".format(err))
 
@@ -308,7 +308,7 @@ class LandWaterMask():
                                gridRows,
                                gridCols)
             LOG.debug("Returning from C routine grid2gran() with retVal {}".format(retVal))
-        except Exception, err:
+        except Exception as err:
             LOG.debug("There was a problem running C routine grid2gran()")
             LOG.warning("EXCEPTION: {}".format(err))
 
@@ -352,7 +352,7 @@ class LandWaterMask():
                                             gridData.astype(np.float64),
                                             gridLat.astype(np.float64),
                                             gridLon.astype(np.float64))
-        except Exception, err:
+        except Exception as err:
             LOG.debug("There was a problem running  _grid2gran()")
             LOG.warning("EXCEPTION: {}".format(err))
             return 1
@@ -432,7 +432,7 @@ class LandWaterMask():
             # Close the file
             file_obj.close()
 
-        except Exception, err:
+        except Exception as err:
             LOG.error("Writing to LWM file {} failed".format(lwm_file))
             LOG.debug("EXCEPTION: {}".format(err))
             return 1
