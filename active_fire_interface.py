@@ -590,10 +590,9 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
         # Construct the command line invocation. As the "vfire" binary is currently constructed,
         # The order of the inputs is important.
         if afire_options['i_band']:
-            af_format_str = './{} -a {} -ndv' + ' {}' * 11
+            af_format_str = './{} -ndv' + ' {}' * 11
             afire_data_dict[granule_id]['cmd'] = af_format_str.format(
                 vfire_exe,
-                basename(afire_data_dict[granule_id]['AFEDR']['txt']),
                 basename(afire_data_dict[granule_id]['SVI01']['file']),
                 basename(afire_data_dict[granule_id]['SVI02']['file']),
                 basename(afire_data_dict[granule_id]['SVI03']['file']),
