@@ -22,6 +22,7 @@ import traceback
 import multiprocessing
 from datetime import datetime
 from subprocess import call, check_call, CalledProcessError
+import numpy as np
 
 import h5py
 from netCDF4 import Dataset
@@ -157,7 +158,7 @@ def afire_submitter(args):
             logpath = pjoin(log_dir, logname)
             logfile_obj = open(logpath, 'w')
             for line in exe_out.splitlines():
-                logfile_obj.write(line + "\n")
+                logfile_obj.write(str(line) + "\n")
             logfile_obj.close()
 
             # Update the various file global attributes
@@ -178,25 +179,13 @@ def afire_submitter(args):
                 if afire_options['i_band']:
 
                     # Update the I-band attributes, and write the fire data to a text file.
-
-                    # FIXME: There is something screwey about the I-band outputs: they are NetCDF
-                    #        files, but they can only be opened with h5py.
-                    # FIXME: https://github.com/h5py/h5py/issues/441
-                    #        There is an issue with h5py writing Unicode strings as attributes,
-                    #        so we need to a bit more ( *.encode('utf8') etc...) to get it to work.
-                    #        This issue is supposed to fixed, perhaps our version of h5py is too
-                    #        old...
                     h5_file_obj = h5py.File(old_output_file, "a")
-                    h5_file_obj.attrs.create('date_created', [a.encode('utf8') for a in
-                        creation_dt.isoformat()] )
-                    h5_file_obj.attrs.create('granule_id', [a.encode('utf8') for a in granule_id])
-                    history_string = 'CSPP Active Fires version: {}'.format(
-                        afire_options['version'])
-                    h5_file_obj.attrs.create('history', [a.encode('utf8') for a in history_string])
-                    h5_file_obj.attrs.create('Metadata_Link', [a.encode('utf8') for a in
-                        basename(old_output_file)])
-                    h5_file_obj.attrs.create('id', [a.encode('utf8') for a in
-                        getURID(creation_dt)['URID']])
+                    h5_file_obj.attrs.create('date_created', np.string_(creation_dt.isoformat()))
+                    h5_file_obj.attrs.create('granule_id', np.string_(granule_id))
+                    history_string = 'CSPP Active Fires version: {}'.format(afire_options['version'])
+                    h5_file_obj.attrs.create('history', np.string_(history_string))
+                    h5_file_obj.attrs.create('Metadata_Link', np.string_(basename(old_output_file)))
+                    h5_file_obj.attrs.create('id', np.string_(getURID(creation_dt)['URID']))
 
                     # Extract desired data from the NetCDF4 file, for output to the text file
                     nfire = h5_file_obj.attrs['FirePix'][0]
@@ -342,9 +331,10 @@ def afire_submitter(args):
                 LOG.debug(traceback.format_exc())
 
             # Move output files to the work directory
-            LOG.debug("\tMoving output files from {} to {}".format(work_dir, run_dir))
+            LOG.debug("\tMoving output files from {} to {}".format(run_dir, work_dir))
             af_prefix = 'AFIMG' if afire_options['i_band'] else 'AFMOD'
-            outfiles = glob(pjoin(run_dir, '{}*.nc'.format(af_prefix))) \
+            af_suffix = 'nc' if afire_options['i_band'] else 'nc' # FIXME: NOAA should fix NC output for I-band!
+            outfiles = glob(pjoin(run_dir, '{}*.{}'.format(af_prefix, af_suffix))) \
                      + glob(pjoin(run_dir, '{}*.txt'.format(af_prefix)))
 
             for outfile in outfiles:

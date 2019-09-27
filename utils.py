@@ -167,7 +167,7 @@ def check_and_convert_path(key, a_path, check_write=False):
     if ":" in a_path:
         paths = a_path.split(":")
         isinstance(s, string_types)
-    elif isinstance(a_path, string_types): 
+    elif isinstance(a_path, string_types):
         paths = [a_path]
     else:
         paths = a_path

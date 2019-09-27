@@ -541,7 +541,7 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
     geo_prefix = 'GITCO' if afire_options['i_band'] else 'GMTCO'
     lwm_prefix = 'GRLWM'
     af_prefix = 'AFIMG' if afire_options['i_band'] else 'AFMOD'
-    vfire_exe = 'vfire375_noaa_static' if afire_options['i_band'] else 'vfire_hdf5_static'
+    vfire_exe = 'vfire375_static' if afire_options['i_band'] else 'vfire750_static'
 
     afire_options['vfire_exe'] = vfire_exe
 
@@ -571,14 +571,16 @@ def construct_cmd_invocations(afire_data_dict, afire_options):
         afire_data_dict[granule_id]['GRLWM'] = {'file': land_water_mask}
 
         # Construct the output filename.
-        afire_output_file = '{}_{}_d{}_t{}_e{}_b{}_c{}_cspp_dev.nc'.format(
+        afire_output_file = '{}_{}_d{}_t{}_e{}_b{}_c{}_cspp_dev.{}'.format(
             af_prefix,
             afire_data_dict[granule_id][geo_prefix]['sat'],
             afire_data_dict[granule_id][geo_prefix]['date'],
             afire_data_dict[granule_id][geo_prefix]['start_time'],
             afire_data_dict[granule_id][geo_prefix]['end_time'],
             afire_data_dict[granule_id][geo_prefix]['orbit'],
-            creation_dt.strftime("%Y%m%d%H%M%S%f")
+            creation_dt.strftime("%Y%m%d%H%M%S%f"),
+            'nc'
+            #'h5' if afire_options['i_band'] else 'nc' # FIXME: NOAA should fix NC output for I-band!
         )
         afire_output_txt_file = '{}.txt'.format(splitext(afire_output_file)[0])
 
